@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-15T00:00:00+08:00",
+  "title": "Design System: Pelagic",
+  "extensions": {
+    "colorMeta": {
+      "ocean-base": { "role": "neutral", "displayName": "Ocean Base", "canonical": "#061a2e", "tonalRamp": ["oklch(15% 0.035 245)", "oklch(26% 0.035 245)", "oklch(37% 0.035 245)", "oklch(48% 0.035 245)", "oklch(59% 0.035 245)", "oklch(70% 0.035 245)", "oklch(81% 0.035 245)", "oklch(95% 0.035 245)"] },
+      "rail": { "role": "neutral", "displayName": "Rail Night", "canonical": "#07192b", "tonalRamp": ["oklch(15% 0.03 246)", "oklch(26% 0.03 246)", "oklch(37% 0.03 246)", "oklch(48% 0.03 246)", "oklch(59% 0.03 246)", "oklch(70% 0.03 246)", "oklch(81% 0.03 246)", "oklch(95% 0.03 246)"] },
+      "surface": { "role": "neutral", "displayName": "Submerged Surface", "canonical": "#0a2237", "tonalRamp": ["oklch(15% 0.04 244)", "oklch(26% 0.04 244)", "oklch(37% 0.04 244)", "oklch(48% 0.04 244)", "oklch(59% 0.04 244)", "oklch(70% 0.04 244)", "oklch(81% 0.04 244)", "oklch(95% 0.04 244)"] },
+      "surface-raised": { "role": "neutral", "displayName": "Raised Surface", "canonical": "#0d2a41", "tonalRamp": ["oklch(15% 0.05 244)", "oklch(26% 0.05 244)", "oklch(37% 0.05 244)", "oklch(48% 0.05 244)", "oklch(59% 0.05 244)", "oklch(70% 0.05 244)", "oklch(81% 0.05 244)", "oklch(95% 0.05 244)"] },
+      "ocean-glow": { "role": "neutral", "displayName": "Ocean Glow", "canonical": "#164c68", "tonalRamp": ["oklch(15% 0.06 235)", "oklch(26% 0.06 235)", "oklch(37% 0.06 235)", "oklch(48% 0.06 235)", "oklch(59% 0.06 235)", "oklch(70% 0.06 235)", "oklch(81% 0.06 235)", "oklch(95% 0.06 235)"] },
+      "divider": { "role": "neutral", "displayName": "Marine Divider", "canonical": "#31556a", "tonalRamp": ["oklch(15% 0.035 235)", "oklch(26% 0.035 235)", "oklch(37% 0.035 235)", "oklch(48% 0.035 235)", "oklch(59% 0.035 235)", "oklch(70% 0.035 235)", "oklch(81% 0.035 235)", "oklch(95% 0.035 235)"] },
+      "mist": { "role": "neutral", "displayName": "Open-Water Mist", "canonical": "#e9f3f6", "tonalRamp": ["oklch(15% 0.01 225)", "oklch(26% 0.01 225)", "oklch(37% 0.01 225)", "oklch(48% 0.01 225)", "oklch(59% 0.01 225)", "oklch(70% 0.01 225)", "oklch(81% 0.01 225)", "oklch(95% 0.01 225)"] },
+      "body-muted": { "role": "neutral", "displayName": "Subdued Current", "canonical": "#a7c1c9", "tonalRamp": ["oklch(15% 0.02 220)", "oklch(26% 0.02 220)", "oklch(37% 0.02 220)", "oklch(48% 0.02 220)", "oklch(59% 0.02 220)", "oklch(70% 0.02 220)", "oklch(81% 0.02 220)", "oklch(95% 0.02 220)"] },
+      "label-muted": { "role": "neutral", "displayName": "Instrument Blue", "canonical": "#81a9b6", "tonalRamp": ["oklch(15% 0.035 225)", "oklch(26% 0.035 225)", "oklch(37% 0.035 225)", "oklch(48% 0.035 225)", "oklch(59% 0.035 225)", "oklch(70% 0.035 225)", "oklch(81% 0.035 225)", "oklch(95% 0.035 225)"] },
+      "seafoam": { "role": "secondary", "displayName": "Quiet Seafoam", "canonical": "#bce0df", "tonalRamp": ["oklch(15% 0.035 190)", "oklch(26% 0.035 190)", "oklch(37% 0.035 190)", "oklch(48% 0.035 190)", "oklch(59% 0.035 190)", "oklch(70% 0.035 190)", "oklch(81% 0.035 190)", "oklch(95% 0.035 190)"] },
+      "focus-aqua": { "role": "secondary", "displayName": "Focus Aqua", "canonical": "#6fe0df", "tonalRamp": ["oklch(15% 0.09 190)", "oklch(26% 0.09 190)", "oklch(37% 0.09 190)", "oklch(48% 0.09 190)", "oklch(59% 0.09 190)", "oklch(70% 0.09 190)", "oklch(81% 0.09 190)", "oklch(95% 0.09 190)"] },
+      "coral": { "role": "primary", "displayName": "Dive Coral", "canonical": "#e69b55", "tonalRamp": ["oklch(15% 0.09 58)", "oklch(26% 0.09 58)", "oklch(37% 0.09 58)", "oklch(48% 0.09 58)", "oklch(59% 0.09 58)", "oklch(70% 0.09 58)", "oklch(81% 0.09 58)", "oklch(95% 0.09 58)"] },
+      "coral-light": { "role": "primary", "displayName": "Sunlit Coral", "canonical": "#ffc383", "tonalRamp": ["oklch(15% 0.075 65)", "oklch(26% 0.075 65)", "oklch(37% 0.075 65)", "oklch(48% 0.075 65)", "oklch(59% 0.075 65)", "oklch(70% 0.075 65)", "oklch(81% 0.075 65)", "oklch(95% 0.075 65)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Encounter Display", "purpose": "Primary narrative headlines on log, map, and identification screens." },
+      "headline": { "displayName": "Flow Headline", "purpose": "Large stage headings in the record flow." },
+      "title": { "displayName": "Section Title", "purpose": "Topbar, section, and compact editorial titles." },
+      "body": { "displayName": "Supporting Copy", "purpose": "Instructions and explanatory text." },
+      "label": { "displayName": "Log Label", "purpose": "Uppercase dates, metadata, field labels, and progress labels." }
+    },
+    "shadows": [
+      { "name": "action-lift", "value": "0 8px 20px #0003", "purpose": "Primary, new-dive, and publish buttons." },
+      { "name": "mobile-add-lift", "value": "0 4px 14px #0005", "purpose": "Raised central mobile navigation action." },
+      { "name": "scan-glow", "value": "0 0 14px #94f5e9", "purpose": "Animated identification scan line." }
+    ],
+    "motion": [
+      { "name": "control-transition", "value": ".2s ease", "purpose": "Navigation row color and surface transition." },
+      { "name": "card-transition", "value": "transform .25s ease, background .25s", "purpose": "Sighting card hover response." },
+      { "name": "photo-transition", "value": "transform .5s", "purpose": "Sighting photo zoom on hover." },
+      { "name": "scan", "value": "scan 3.5s ease-in-out infinite", "purpose": "Identification scan line movement." },
+      { "name": "toast-rise", "value": "rise .35s ease-out", "purpose": "Published toast entrance." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "800px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Warm action control for starting, confirming, or publishing a dive record.",
+      "html": "<button class=\"ds-btn-primary\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>記錄一潛</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:9px; border:0; border-radius:9px; background:#e69b55; color:#071b2d; padding:12px 17px; font:800 13px Manrope, sans-serif; box-shadow:0 8px 20px #0003; cursor:pointer; transition:background .2s ease; } .ds-btn-primary svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; } .ds-btn-primary:hover { background:#ffc383; } .ds-btn-primary:focus-visible { outline:2px solid #6fe0df; outline-offset:3px; } .ds-btn-primary:active { transform:translateY(1px); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined correction action used alongside a primary confirmation.",
+      "html": "<button class=\"ds-btn-secondary\">不是，修改</button>",
+      "css": ".ds-btn-secondary { border:1px solid #628594; border-radius:9px; background:transparent; color:#d4eaec; padding:11px 15px; font:700 13px Manrope, sans-serif; cursor:pointer; } .ds-btn-secondary:hover { border-color:#bce0df; color:#f4fbfc; } .ds-btn-secondary:focus-visible { outline:2px solid #6fe0df; outline-offset:3px; } .ds-btn-secondary:active { transform:translateY(1px); }"
+    },
+    {
+      "name": "Line Field",
+      "kind": "input",
+      "refersTo": "field-line",
+      "description": "Transparent, underlined text field for editable dive facts.",
+      "html": "<label class=\"ds-field\">物種名稱<input value=\"玳瑁\" aria-label=\"物種名稱\"></label>",
+      "css": ".ds-field { display:grid; gap:8px; color:#bce0df; font:500 10px 'DM Mono', monospace; letter-spacing:.08em; text-transform:uppercase; } .ds-field input { border:0; border-bottom:1px solid #4c7180; background:transparent; color:#f1fbfb; padding:10px 0; outline:none; font:600 20px 'Playfair Display', serif; } .ds-field input:focus { border-color:#e69b55; } .ds-field input:focus-visible { outline:2px solid #6fe0df; outline-offset:3px; }"
+    },
+    {
+      "name": "Rail Navigation Row",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "Fixed-rail navigation row with a visible aqua active edge.",
+      "html": "<button class=\"ds-nav-row ds-nav-row-active\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m3 11 9-8 9 8v10H3zM9 21v-6h6v6\"/></svg><span>日誌</span></button>",
+      "css": ".ds-nav-row { border:0; background:transparent; color:#80a7b5; display:flex; align-items:center; gap:13px; width:100%; padding:12px; border-radius:10px; text-align:left; font:400 14px Manrope, sans-serif; cursor:pointer; transition:.2s ease; } .ds-nav-row svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; } .ds-nav-row:hover, .ds-nav-row-active { color:#f4fbfc; background:#13374d; } .ds-nav-row-active { box-shadow:inset 2px 0 #6fe0df; } .ds-nav-row:focus-visible { outline:2px solid #6fe0df; outline-offset:3px; }"
+    },
+    {
+      "name": "Sighting Card",
+      "kind": "card",
+      "refersTo": "card-sighting",
+      "description": "Square-edged photo record with mono metadata and editorial species naming.",
+      "html": "<article class=\"ds-sighting-card\"><div class=\"ds-sighting-photo\"><div class=\"ds-water\"></div><span>18 m</span></div><div class=\"ds-sighting-copy\"><p>今天</p><h3>海龜</h3><i>Eretmochelys imbricata</i><small>⌖ Blue Corner · 帛琉</small></div></article>",
+      "css": ".ds-sighting-card { width:260px; background:#0a2237; color:#e9f3f6; transition:transform .25s ease, background .25s; overflow:hidden; } .ds-sighting-card:hover { transform:translateY(-5px); background:#0d2a41; } .ds-sighting-photo { height:180px; position:relative; overflow:hidden; } .ds-water { height:100%; background:linear-gradient(145deg,#164c68,#0a2237 70%); transition:transform .5s; } .ds-sighting-card:hover .ds-water { transform:scale(1.05); } .ds-sighting-photo span { position:absolute; left:10px; bottom:10px; background:#061a2edd; padding:6px 8px; font:500 10px 'DM Mono', monospace; letter-spacing:.05em; } .ds-sighting-copy { padding:15px 16px 18px; } .ds-sighting-copy p { margin:0 0 8px; color:#81a9b6; font:500 11px 'DM Mono', monospace; letter-spacing:.1em; text-transform:uppercase; } .ds-sighting-copy h3 { margin:0; font:600 20px 'Playfair Display', serif; } .ds-sighting-copy i { display:block; color:#87aeb9; margin:3px 0 18px; font:italic 13px 'Playfair Display', serif; } .ds-sighting-copy small { display:block; border-top:1px solid #284a5e; padding-top:11px; color:#b8d1d8; font:400 11px Manrope, sans-serif; }"
+    },
+    {
+      "name": "Dive Meter",
+      "kind": "custom",
+      "refersTo": "dive-meter",
+      "description": "Ruled mono progress strip for the three-step dive-record flow.",
+      "html": "<div class=\"ds-meter\"><span>LOG 013</span><div><button class=\"ds-step ds-done\"><i>✓</i>選擇照片</button><button class=\"ds-step ds-active\"><i>02</i>辨識確認</button><button class=\"ds-step\"><i>03</i>完成一潛</button></div><span>DEPTH / —</span></div>",
+      "css": ".ds-meter { display:flex; justify-content:space-between; align-items:center; border-block:1px solid #31556a; padding:12px 0; color:#83a5af; font:500 10px 'DM Mono', monospace; letter-spacing:.08em; } .ds-meter > div { display:flex; gap:25px; } .ds-step { display:flex; align-items:center; gap:7px; border:0; background:transparent; color:#547889; padding:0; font:inherit; cursor:pointer; } .ds-step i { display:grid; place-items:center; width:19px; height:19px; border:1px solid currentColor; border-radius:50%; font-style:normal; font-size:8px; } .ds-step:hover { color:#e8f4f5; } .ds-step:focus-visible { outline:2px solid #6fe0df; outline-offset:3px; } .ds-step.ds-active { color:#e8f4f5; } .ds-step.ds-active i { border-color:#e69b55; color:#e69b55; } .ds-step.ds-done { color:#a6d0cd; }"
+    },
+    {
+      "name": "Map Pin",
+      "kind": "custom",
+      "refersTo": "map-pin",
+      "description": "Pale pill marker for a recorded place on the map surface.",
+      "html": "<button class=\"ds-map-pin\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 12c3-4 6-4 9 0s6 4 9 0M4 15c3 3 5 3 8 0s5-3 8 0M8 7h.01M16 7h.01\"/></svg>帛琉</button>",
+      "css": ".ds-map-pin { display:inline-flex; align-items:center; gap:5px; border:0; border-radius:20px; background:#dcefee; color:#083047; padding:7px 10px; font:800 11px Manrope, sans-serif; cursor:pointer; } .ds-map-pin svg { width:16px; height:16px; fill:none; stroke:#e16f4e; stroke-width:2; stroke-linecap:round; } .ds-map-pin:hover { background:#fff; } .ds-map-pin:focus-visible { outline:2px solid #6fe0df; outline-offset:3px; } .ds-map-pin:active { transform:translateY(1px); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Nautical Field Journal",
+    "overview": "Pelagic combines an inky, instrument-like shell with an editorial record of underwater life. Large serif headlines and species names give photographs and memories a reflective cadence; compact monospaced labels supply the measured, logged quality of dates, depths, steps, and map metadata.\n\nThe interface is deliberately dark and spatially restrained. Deep blue surfaces, thin marine-blue rules, cropped photography, and a single coral action color keep the focus on the dive record. On narrow screens, the fixed rail becomes a translucent bottom navigation while the core hierarchy and warm action point remain intact.",
+    "keyCharacteristics": ["Dark ocean fieldwork atmosphere with a restrained editorial voice.", "Serif-led narrative hierarchy paired with operational mono labels.", "Flat tonal surfaces, fine dividers, and photographic evidence over decorative chrome.", "Coral is the active/action signal; seafoam and aqua support confirmation and focus."],
+    "rules": [
+      { "name": "The Coral Signal Rule", "body": "Coral is reserved for an action, a state change, or a location/species marker; it does not become a general surface color.", "section": "colors" },
+      { "name": "The Journal-and-Instrument Rule", "body": "Use Playfair Display for the remembered encounter and DM Mono for the logged fact; keep utility controls in Manrope.", "section": "typography" },
+      { "name": "The Evidence-First Depth Rule", "body": "Use tonal separation, photography, and fine rules for resting depth; reserve shadows for an actionable or transient element.", "section": "elevation" }
+    ],
+    "dos": ["Do keep the inky ocean ground, layered blue surfaces, and thin marine dividers as the default material system.", "Do put the remembered encounter in Playfair Display and the logged metadata in DM Mono.", "Do use coral for calls to action and small status/marker moments, with seafoam/aqua for confirmation and focus.", "Do preserve the implemented 800px mobile transition from fixed side rail to fixed blurred bottom navigation.", "Do let real underwater photography carry the visual focal point, using the existing crop and overlay treatment for legible metadata."],
+    "donts": ["Don't apply rounded corners or shadows indiscriminately to cards and large surfaces; the implemented resting composition is mostly flat and square.", "Don't turn muted metadata into primary body text; its compact mono hierarchy is intentional.", "Don't use coral as a large background field or general decoration; it is an action signal.", "Don't remove the visible aqua focus treatment from interactive controls."]
+  }
+}
