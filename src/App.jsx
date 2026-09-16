@@ -123,6 +123,21 @@ export default function App() {
     );
     if (!error) setAuthOpen(false);
   };
+  const signInWithGoogle = async () => {
+    if (!supabase) {
+      setNotice("雲端設定尚未完成，請稍後重試");
+      return;
+    }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      setAuthBusy(false);
+      setNotice(`無法使用 Google 登入：${error.message}`);
+    }
+  };
   const title =
     view === "log"
       ? "Dive log"
@@ -210,10 +225,18 @@ export default function App() {
           <form className="auth-panel" onSubmit={signIn}>
             <div>
               <h2>把每一潛存進自己的帳戶。</h2>
-              <p>輸入 Email，我們會寄送一封一次性登入連結；不用記密碼。</p>
+              <p>使用 Google 登入，不用密碼，也不受寄信額度影響。</p>
             </div>
+            <button
+              className="google-button"
+              type="button"
+              disabled={authBusy}
+              onClick={signInWithGoogle}
+            >
+              使用 Google 登入
+            </button>
             <label>
-              EMAIL
+              EMAIL（備用登入）
               <input
                 type="email"
                 required
