@@ -171,6 +171,11 @@ export async function addDiveComment({ logId, userId, body }) {
   if (error) throw error
   return data
 }
+
+export async function deleteDiveComment({ commentId, userId }) {
+  const { error } = await requireSupabase().from('dive_log_comments').delete().eq('id', commentId).eq('user_id', userId)
+  if (error) throw error
+}
 export async function listNotifications(userId) { const { data, error } = await requireSupabase().from('notifications').select('*').eq('recipient_id', userId).order('created_at', { ascending: false }).limit(40); if (error) throw error; return data }
 export async function markNotificationsRead(userId) { const { error } = await requireSupabase().from('notifications').update({ read_at: new Date().toISOString() }).eq('recipient_id', userId).is('read_at', null); if (error) throw error }
 
