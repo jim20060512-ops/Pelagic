@@ -578,9 +578,9 @@ function World({ logs }) {
     <section className="map-view">
       <div className="map-copy">
         <h2>
-        把每一段潛水足跡，
+        世界很大，
         <br />
-        標在世界上。
+        留下你的潛點。
         </h2>
         <p>公開潛點來自 OpenStreetMap；你的日誌會以橙色圓點標示。</p>
       </div>
