@@ -23,11 +23,14 @@ import {
 import { supabase } from "./lib/supabase";
 import {
   createDiveLog,
+  followDiver,
   getProfile,
   listMyDiveLogs,
   listProfilePublicLogs,
+  listFollowing,
   listPublicDiveLogs,
   saveProfile,
+  unfollowDiver,
 } from "./lib/diveLogs";
 
 const blank = () => ({
@@ -70,7 +73,8 @@ export default function App() {
     [authBusy, setAuthBusy] = useState(false),
     [profile, setProfile] = useState(null),
     [publicLogs, setPublicLogs] = useState([]),
-    [profileOwner, setProfileOwner] = useState(null);
+    [profileOwner, setProfileOwner] = useState(null),
+    [following, setFollowing] = useState([]);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth
@@ -89,7 +93,23 @@ export default function App() {
     getProfile(session.user.id)
       .then((row) => setProfile(row))
       .catch(() => setNotice("無法讀取個人檔案，請稍後再試"));
+    listFollowing(session.user.id).then(setFollowing).catch(() => setNotice("無法讀取追蹤清單，請稍後再試"));
   }, [session]);
+  const toggleFollow = async (personId) => {
+    if (!session || personId === session.user.id) return;
+    const isFollowing = following.includes(personId);
+    try {
+      if (isFollowing) {
+        await unfollowDiver({ followerId: session.user.id, followingId: personId });
+        setFollowing((ids) => ids.filter((id) => id !== personId));
+        setNotice("已取消追蹤");
+      } else {
+        await followDiver({ followerId: session.user.id, followingId: personId });
+        setFollowing((ids) => [...ids, personId]);
+        setNotice("已開始追蹤這位潛水者");
+      }
+    } catch (error) { setNotice(`無法更新追蹤狀態：${error.message}`); }
+  };
   useEffect(() => {
     if (!session || view !== "explore") return;
     listPublicDiveLogs()
@@ -296,8 +316,8 @@ export default function App() {
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "map" && <World logs={logs} />}{" "}
-        {view === "explore" && <Explore logs={publicLogs} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
-        {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} />}
+        {view === "explore" && <Explore logs={publicLogs} following={following} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
+        {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
       <Mobile
         {...{ view, setView }}
@@ -691,11 +711,13 @@ function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
   return <span className="profile-avatar profile-avatar-fallback">{(profile?.display_name || fallback).slice(0, 2).toUpperCase()}</span>;
 }
-function Explore({ logs, openProfile }) {
+function Explore({ logs, following, openProfile }) {
+  const [feed, setFeed] = useState("all");
+  const visibleLogs = feed === "following" ? logs.filter((log) => following.includes(log.userId)) : logs;
   return (
     <section className="explore-view">
-      <div className="explore-copy"><h2>從真實的相遇，認識海底世界。</h2><p>這裡只會出現潛水者自己公開的日誌。</p></div>
-      {!logs.length ? <Empty /> : <div className="log-grid">{logs.map((x) => <article className="sighting-card" key={x.id}>
+      <div className="explore-copy"><h2>從真實的相遇，認識海底世界。</h2><p>這裡只會出現潛水者自己公開的日誌。</p><div className="feed-switch" role="tablist"><button className={feed === "all" ? "active" : ""} onClick={() => setFeed("all")}>全部公開日誌</button><button className={feed === "following" ? "active" : ""} onClick={() => setFeed("following")}>追蹤中 <span>{following.length}</span></button></div></div>
+      {!visibleLogs.length ? <Empty following={feed === "following"} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
         <div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div>
         <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
           <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" />{x.profile?.display_name || "潛水者"} <span>→</span></button>
@@ -704,8 +726,8 @@ function Explore({ logs, openProfile }) {
     </section>
   );
 }
-function Empty() { return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>社群會由真實的潛水者開始。</h2><p>目前沒有公開紀錄，因此不顯示虛構人物或假內容。</p></section>; }
-function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNotice }) {
+function Empty({ following = false }) { return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>{following ? "你追蹤的人還沒有公開日誌。" : "社群會由真實的潛水者開始。"}</h2><p>{following ? "先在公開日誌裡追蹤潛水者；他們的新紀錄會出現在這裡。" : "目前沒有公開紀錄，因此不顯示虛構人物或假內容。"}</p></section>; }
+function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNotice, following, toggleFollow }) {
   const isOwn = !owner || owner.id === currentUser.id;
   const [shownProfile, setShownProfile] = useState(isOwn ? profile : owner.profile);
   const [shownLogs, setShownLogs] = useState(isOwn ? ownLogs.filter((x) => x.visibility === "public") : []);
@@ -718,7 +740,7 @@ function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNoti
   }, [isOwn, owner?.id, profile, ownLogs]);
   useEffect(() => setForm({ displayName: profile?.display_name || "", bio: profile?.bio || "", avatarUrl: profile?.avatar_url || "" }), [profile]);
   const save = async (e) => { e.preventDefault(); try { const saved = await saveProfile({ userId: currentUser.id, ...form }); setProfile(saved); setShownProfile(saved); setEditing(false); setNotice("個人檔案已儲存"); } catch (error) { setNotice(`無法儲存個人檔案：${error.message}`); } };
-  return <section className="profile-view"><div className="profile-hero"><ProfileAvatar profile={shownProfile} fallback={isOwn ? currentUser.email : "潛"} /><div><h2>{shownProfile?.display_name || (isOwn ? "為自己命名" : "潛水者")}</h2><p>{shownProfile?.bio || (isOwn ? "讓其他潛水者知道你在海裡尋找什麼。" : "這位潛水者還沒有留下簡介。")}</p></div>{isOwn && <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((x) => !x)}>{editing ? "取消編輯" : "編輯檔案"}</button><button className="signout-button" onClick={() => supabase.auth.signOut()}>登出</button></div>}</div>
+  return <section className="profile-view"><div className="profile-hero"><ProfileAvatar profile={shownProfile} fallback={isOwn ? currentUser.email : "潛"} /><div><h2>{shownProfile?.display_name || (isOwn ? "為自己命名" : "潛水者")}</h2><p>{shownProfile?.bio || (isOwn ? "讓其他潛水者知道你在海裡尋找什麼。" : "這位潛水者還沒有留下簡介。")}</p></div>{isOwn ? <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((x) => !x)}>{editing ? "取消編輯" : "編輯檔案"}</button><button className="signout-button" onClick={() => supabase.auth.signOut()}>登出</button></div> : <button className={`follow-button ${following.includes(owner.id) ? "is-following" : ""}`} onClick={() => toggleFollow(owner.id)}>{following.includes(owner.id) ? "追蹤中" : "追蹤這位潛水者"}</button>}</div>
     {editing && <form className="profile-form" onSubmit={save}><label>顯示名稱<input required maxLength="40" value={form.displayName} onChange={(e) => setForm((x) => ({...x, displayName:e.target.value}))} /></label><label>個人簡介<textarea maxLength="180" value={form.bio} onChange={(e) => setForm((x) => ({...x, bio:e.target.value}))} placeholder="例如：喜歡微距、珊瑚礁與夜潛。" /></label><label>頭像圖片網址<span className="field-hint">可留空，會使用你的名字縮寫。</span><input type="url" value={form.avatarUrl} onChange={(e) => setForm((x) => ({...x, avatarUrl:e.target.value}))} placeholder="https://…" /></label><button className="primary-button">儲存檔案</button></form>}
     <section className="section-head"><h2>{isOwn ? "我的公開日誌" : "公開日誌"}</h2></section>{!shownLogs.length ? <p className="profile-empty">還沒有公開日誌。</p> : <div className="log-grid">{shownLogs.map((x) => <article className="sighting-card" key={x.id}><div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div><div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p></div></article>)}</div>}</section>;
 }

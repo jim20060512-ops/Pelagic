@@ -62,3 +62,19 @@ export async function listProfilePublicLogs(userId) {
   if (error) throw error
   return data
 }
+
+export async function listFollowing(userId) {
+  const { data, error } = await requireSupabase().from('follows').select('following_id').eq('follower_id', userId)
+  if (error) throw error
+  return data.map((row) => row.following_id)
+}
+
+export async function followDiver({ followerId, followingId }) {
+  const { error } = await requireSupabase().from('follows').insert({ follower_id: followerId, following_id: followingId })
+  if (error) throw error
+}
+
+export async function unfollowDiver({ followerId, followingId }) {
+  const { error } = await requireSupabase().from('follows').delete().eq('follower_id', followerId).eq('following_id', followingId)
+  if (error) throw error
+}
