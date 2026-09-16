@@ -7,3 +7,5 @@ dist/
 .codex/
 .impeccable/config.local.json
 *.log
+
+.vercel
