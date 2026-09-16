@@ -61,6 +61,19 @@ const blank = () => ({
   visibility: "private",
   sightings: [],
 });
+// Leaflet can report a longitude outside the normal world after a user drags
+// across a wrapped copy of the map. Keep every coordinate in the one world the
+// database understands before it is displayed, reverse-geocoded, or saved.
+function normalizeLongitude(value) {
+  const longitude = Number(value);
+  if (!Number.isFinite(longitude)) return null;
+  const wrapped = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return wrapped === -180 && longitude > 0 ? 180 : wrapped;
+}
+function validCoordinates(lat, lng) {
+  return Number.isFinite(Number(lat)) && Math.abs(Number(lat)) <= 90 &&
+    Number.isFinite(Number(lng)) && Math.abs(Number(lng)) <= 180;
+}
 async function reversePlace(lat, lng) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1&accept-language=zh-TW`;
   const d = await (await fetch(url)).json();
@@ -155,14 +168,20 @@ export default function App() {
       setNotice("登入後才能把相片與日誌安全儲存到你的帳戶");
       return false;
     }
+    const latitude = Number(draft.lat);
+    const longitude = normalizeLongitude(draft.lng);
+    if (!validCoordinates(latitude, longitude)) {
+      setNotice("請在地圖上重新選擇一個有效的潛點。");
+      return false;
+    }
     try {
       const row = await createDiveLog({
         userId: session.user.id,
         sightings,
         date: draft.date,
         depth: draft.depth,
-        latitude: draft.lat,
-        longitude: draft.lng,
+        latitude,
+        longitude,
         locationName: draft.locationName,
         visibility: draft.visibility,
       });
@@ -498,14 +517,16 @@ function New({ draft, setDraft, step, setStep, add }) {
     }
   };
   const pick = async ({ lat, lng }) => {
+    const safeLng = normalizeLongitude(lng);
+    if (!validCoordinates(lat, safeLng)) return;
     const id = ++seq.current;
-    setDraft((x) => ({ ...x, lat, lng, locationName: "" }));
+    setDraft((x) => ({ ...x, lat, lng: safeLng, locationName: "" }));
     setLoading(true);
     const wait = Math.max(0, 1000 - (Date.now() - last.current));
     if (wait) await new Promise((r) => setTimeout(r, wait));
     last.current = Date.now();
     try {
-      const locationName = await reversePlace(lat, lng);
+      const locationName = await reversePlace(lat, safeLng);
       if (id === seq.current) setDraft((x) => ({ ...x, locationName }));
     } catch {
       if (id === seq.current)
@@ -520,7 +541,7 @@ function New({ draft, setDraft, step, setStep, add }) {
     await add(sightings);
     setSaving(false);
   };
-  const locateAddress = async () => { if (!address.trim()) return; setLoading(true); try { const rows = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(address)}`)).json(); if (rows[0]) { const lat = +rows[0].lat, lng = +rows[0].lon; setDraft((x) => ({ ...x, lat, lng, locationName: rows[0].display_name })); } } finally { setLoading(false); } };
+  const locateAddress = async () => { if (!address.trim()) return; setLoading(true); try { const rows = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(address)}`)).json(); if (rows[0]) { const lat = +rows[0].lat, lng = normalizeLongitude(rows[0].lon); if (validCoordinates(lat, lng)) setDraft((x) => ({ ...x, lat, lng, locationName: rows[0].display_name })); } } finally { setLoading(false); } };
   return (
     <div className="new-dive-flow">
       <div className="dive-meter">
@@ -649,15 +670,17 @@ function EditDive({ log, done, remove }) {
   const [saving, setSaving] = useState(false);
   const update = (key) => (event) => setDraft((value) => ({ ...value, [key]: event.target.value }));
   const pick = async ({ lat, lng }) => {
-    setDraft((value) => ({ ...value, lat, lng }));
-    try { const locationName = await reversePlace(lat, lng); setDraft((value) => ({ ...value, locationName })); } catch { /* retain edited name */ }
+    const safeLng = normalizeLongitude(lng);
+    if (!validCoordinates(lat, safeLng)) return;
+    setDraft((value) => ({ ...value, lat, lng: safeLng }));
+    try { const locationName = await reversePlace(lat, safeLng); setDraft((value) => ({ ...value, locationName })); } catch { /* retain edited name */ }
   };
-  const save = async (event) => { event.preventDefault(); setSaving(true); try { done(await updateDiveLog({ id: log.id, ...draft })); } finally { setSaving(false); } };
+  const save = async (event) => { event.preventDefault(); const longitude = normalizeLongitude(draft.lng); if (!validCoordinates(draft.lat, longitude)) return; setSaving(true); try { done(await updateDiveLog({ id: log.id, ...draft, lng: longitude })); } finally { setSaving(false); } };
   return <section className="edit-dive"><div className="details-heading"><h2>修正這一潛。</h2><p>物種、日期、潛點、座標、深度和可見度都可以更新。</p></div><form onSubmit={save} className="edit-form"><label>物種名稱<input required value={draft.species} onChange={update("species")} /></label><label>日期<input required type="date" value={draft.date} onChange={update("date")} /></label><label>潛點名稱<input required value={draft.locationName} onChange={update("locationName")} /></label><Picker value={draft} onPick={pick} /><p className="coordinates field-coordinates">{draft.lat.toFixed(5)}, {draft.lng.toFixed(5)}</p><label>最大深度（metres）<input required min="0" type="number" value={draft.depth} onChange={update("depth")} /></label><label>日誌可見度<select value={draft.visibility} onChange={update("visibility")}><option value="private">僅自己可見</option><option value="public">公開至社群</option></select></label><div className="edit-actions"><button className="primary-button" disabled={saving}>{saving ? "正在儲存…" : "儲存修改"}</button><button className="delete-button" type="button" onClick={() => { if (window.confirm("確定要刪除這一潛嗎？此操作無法復原。")) remove(); }}>刪除日誌</button></div></form></section>;
 }
 function Picker({ value, onPick }) {
   function Click() {
-    useMapEvents({ click: (e) => onPick(e.latlng) });
+    useMapEvents({ click: (e) => onPick({ lat: e.latlng.lat, lng: normalizeLongitude(e.latlng.lng) }) });
     return value.lat === null ? null : (
       <CircleMarker
         center={[value.lat, value.lng]}
@@ -673,10 +696,11 @@ function Picker({ value, onPick }) {
   }
   return (
     <div className="pick-map">
-      <MapContainer center={[12, 12]} zoom={2} minZoom={2}>
+      <MapContainer center={[12, 12]} zoom={2} minZoom={2} maxBounds={[[-85, -180], [85, 180]]} maxBoundsViscosity={1} worldCopyJump={false}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          noWrap
         />
         <Click />
         <MapFlyTo target={value.lat === null ? null : { lat: value.lat, lng: value.lng }} />
@@ -741,10 +765,11 @@ function World({ ownLogs, publicLogs, following, focus, loggedIn, login, openPro
         <div className="feed-switch map-switch" role="tablist"><button className={layer === "mine" ? "active" : ""} onClick={() => setLayer("mine")}>我的日誌 <span>{ownLogs.length}</span></button><button className={layer === "public" ? "active" : ""} onClick={() => setLayer("public")}>公開日誌 <span>{publicLogs.length}</span></button><button className={layer === "following" ? "active" : ""} onClick={() => setLayer("following")}>追蹤中 <span>{following.length}</span></button></div>
       </div>
       <div className="real-map">
-        <MapContainer center={[12, 12]} zoom={2} minZoom={2}>
+        <MapContainer center={[12, 12]} zoom={2} minZoom={2} maxBounds={[[-85, -180], [85, 180]]} maxBoundsViscosity={1} worldCopyJump={false}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            noWrap
           />
           <Sites status={setStatus} />
           <MapFlyTo target={target} />
@@ -757,7 +782,7 @@ function World({ ownLogs, publicLogs, following, focus, loggedIn, login, openPro
     </section>
   );
 }
-function MapFlyTo({ target }) { const map = useMap(); useEffect(() => { if (target) map.flyTo([target.lat, target.lng], 11, { duration: 1 }); }, [map, target]); return null; }
+function MapFlyTo({ target }) { const map = useMap(); useEffect(() => { const longitude = normalizeLongitude(target?.lng); if (target && validCoordinates(target.lat, longitude)) map.flyTo([target.lat, longitude], 11, { duration: 1 }); }, [map, target]); return null; }
 function PhotoMarker({ log, focused, openProfile }) {
   const markerRef = useRef(null);
   useEffect(() => {
