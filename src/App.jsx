@@ -580,7 +580,7 @@ function World({ logs }) {
         <h2>
         世界很大，
         <br />
-        留下你的潛點。
+        留下你的潛水足跡。
         </h2>
         <p>公開潛點來自 OpenStreetMap；你的日誌會以橙色圓點標示。</p>
       </div>
