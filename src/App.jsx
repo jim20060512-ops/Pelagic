@@ -34,6 +34,7 @@ import {
   listProfilePublicLogs,
   listFollowing,
   listPublicDiveLogs,
+  recordDiveLogView,
   saveProfile,
   unfollowDiver,
   updateDiveLog,
@@ -48,6 +49,7 @@ const blank = () => ({
   lng: null,
   locationName: "",
   visibility: "private",
+  sightings: [],
 });
 async function reversePlace(lat, lng) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1&accept-language=zh-TW`;
@@ -134,7 +136,7 @@ export default function App() {
       .then((rows) => setPublicLogs(rows.map(toLog)))
       .catch(() => setNotice("無法讀取公開日誌，請稍後再試"));
   }, [session, view]);
-  const add = async (photoFile) => {
+  const add = async (sightings) => {
     if (!session) {
       setAuthOpen(true);
       setNotice("登入後才能把相片與日誌安全儲存到你的帳戶");
@@ -143,8 +145,7 @@ export default function App() {
     try {
       const row = await createDiveLog({
         userId: session.user.id,
-        photoFile,
-        species: draft.species,
+        sightings,
         date: draft.date,
         depth: draft.depth,
         latitude: draft.lat,
@@ -358,6 +359,8 @@ function toLog(x) {
     userId: x.user_id,
     image: x.photo_url,
     species: x.species,
+    photos: x.dive_log_photos || [],
+    viewCount: x.view_count || 0,
     date: x.dive_date,
     depth: x.max_depth_m,
     lat: x.latitude,
@@ -463,15 +466,14 @@ function New({ draft, setDraft, step, setStep, add }) {
   const [loading, setLoading] = useState(false),
     [saving, setSaving] = useState(false),
     [address, setAddress] = useState(""),
-    [photoFile, setPhotoFile] = useState(null),
+    [sightings, setSightings] = useState([]),
     seq = useRef(0),
     last = useRef(0);
   const update = (k) => (e) => setDraft((x) => ({ ...x, [k]: e.target.value }));
   const photo = (e) => {
-    const f = e.target.files?.[0];
-    if (f) {
-      setPhotoFile(f);
-      setDraft((x) => ({ ...x, image: URL.createObjectURL(f) }));
+    const files = [...(e.target.files || [])];
+    if (files.length) {
+      setSightings(files.map((file) => ({ file, image: URL.createObjectURL(file), species: "" })));
       setStep(1);
     }
   };
@@ -495,7 +497,7 @@ function New({ draft, setDraft, step, setStep, add }) {
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await add(photoFile);
+    await add(sightings);
     setSaving(false);
   };
   const locateAddress = async () => { if (!address.trim()) return; setLoading(true); try { const rows = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(address)}`)).json(); if (rows[0]) { const lat = +rows[0].lat, lng = +rows[0].lon; setDraft((x) => ({ ...x, lat, lng, locationName: rows[0].display_name })); } } finally { setLoading(false); } };
@@ -521,11 +523,11 @@ function New({ draft, setDraft, step, setStep, add }) {
         <section className="upload-stage">
           <div className="stage-copy">
             <h2>這一潛，遇見了什麼？</h2>
-            <p>選擇你自己的水下照片，從那一刻開始記錄。</p>
+            <p>一潛可記錄多個相遇；每張照片都能留下自己的物種名稱。</p>
             <label className="primary-button file-button">
               <FileImage />
-              從裝置選擇照片
-              <input type="file" accept="image/*" onChange={photo} />
+              選擇這一潛的照片
+              <input type="file" accept="image/*" multiple onChange={photo} />
             </label>
           </div>
           <div className="upload-photo upload-empty">
@@ -536,30 +538,17 @@ function New({ draft, setDraft, step, setStep, add }) {
       )}
       {step === 1 && (
         <section className="identify-stage">
-          <div className="identified-photo">
-            <img src={draft.image} alt="你選擇的水下照片" />
-          </div>
+          <div className="sighting-photo-strip">{sightings.map((sighting, index) => <img key={sighting.image} src={sighting.image} alt={`第 ${index + 1} 張潛水照片`} />)}</div>
           <div className="identify-copy">
             <p className="microcopy">
               <Sparkles size={14} />
               辨識服務尚未連接
             </p>
-            <h2>
-              替這次相遇
-              <br />
-              留下名字。
-            </h2>
-            <label>
-              生物名稱
-              <input
-                placeholder="例如：玳瑁"
-                value={draft.species}
-                onChange={update("species")}
-              />
-            </label>
+            <h2>替每一次相遇，<br />留下名字。</h2>
+            <div className="sighting-names">{sightings.map((sighting, index) => <label key={sighting.image}>照片 {index + 1} 的生物名稱<input placeholder="例如：玳瑁" value={sighting.species} onChange={(event) => setSightings((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, species: event.target.value } : row))} /></label>)}</div>
             <button
               className="primary-button"
-              disabled={!draft.species.trim()}
+              disabled={!sightings.length || sightings.some((sighting) => !sighting.species.trim())}
               onClick={() => setStep(2)}
             >
               <Check />
@@ -757,7 +746,7 @@ function PhotoMarker({ log, focused, openProfile }) {
     return () => window.clearTimeout(timer);
   }, [focused]);
   const icon = divIcon({ className: "map-photo-icon", iconSize: [74, 92], iconAnchor: [37, 88], popupAnchor: [0, -80], html: `<img src="${log.image}" alt=""><span>潛水日誌</span>` });
-  return <Marker ref={markerRef} position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><img src={log.image} alt={`${log.species} 的水下照片`} /><strong>{log.species}</strong><span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small>{log.profile && <button className="popup-author-link" onClick={() => openProfile({ id: log.userId, profile: log.profile })}><ProfileAvatar profile={log.profile} fallback="潛" /><span>查看 {log.profile.display_name || "上傳者"} 的檔案</span></button>}</div></Popup></Marker>;
+  return <Marker ref={markerRef} position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><div className="map-photo-gallery">{(log.photos.length ? log.photos : [{ photo_url: log.image, species: log.species }]).map((photo) => <img key={photo.id || photo.photo_url} src={photo.photo_url} alt={`${photo.species} 的水下照片`} />)}</div><strong>{log.species}</strong>{log.photos.length > 1 && <small>這一潛記錄了 {log.photos.length} 種相遇</small>}<span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small>{log.profile && <button className="popup-author-link" onClick={() => openProfile({ id: log.userId, profile: log.profile })}><ProfileAvatar profile={log.profile} fallback="潛" /><span>查看 {log.profile.display_name || "上傳者"} 的檔案</span></button>}</div></Popup></Marker>;
 }
 function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
@@ -770,7 +759,7 @@ function Explore({ logs, following, loggedIn, login, openMap, openProfile }) {
     <section className="explore-view">
       <div className="explore-copy"><h2>從真實的相遇，認識海底世界。</h2><p>這裡只會出現潛水者自己公開的日誌。</p><div className="feed-switch" role="tablist"><button className={feed === "all" ? "active" : ""} onClick={() => setFeed("all")}>全部公開日誌</button><button className={feed === "following" ? "active" : ""} onClick={() => setFeed("following")}>追蹤中 <span>{following.length}</span></button></div></div>
       {!visibleLogs.length ? <Empty following={feed === "following"} loggedIn={loggedIn} login={login} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
-        <button className="photo-wrap photo-map-link" onClick={() => openMap(x)}><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span><span className="map-link-label">在地圖查看</span></button>
+        <button className="photo-wrap photo-map-link" onClick={() => { recordDiveLogView(x.id).catch(() => {}); openMap(x); }}><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span>{x.photos.length > 1 && <span className="photo-count">{x.photos.length} 張生物照片</span>}<span className="map-link-label">在地圖查看</span></button>
         <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
           <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" /><span>上傳者：{x.profile?.display_name || "潛水者"}</span><span>查看檔案 →</span></button>
         </div>

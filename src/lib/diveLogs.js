@@ -15,20 +15,31 @@ async function signRows(rows) {
     const path = row.photo_path || row.photo_url
     const { data, error } = await client.storage.from('dive-photos').createSignedUrl(path, 900)
     if (error) throw error
-    return { ...row, photo_url: data.signedUrl, photo_path: path }
+    const photos = await Promise.all((row.dive_log_photos || []).map(async (photo) => {
+      const { data: signed, error: photoError } = await client.storage.from('dive-photos').createSignedUrl(photo.photo_path, 900)
+      if (photoError) throw photoError
+      return { ...photo, photo_url: signed.signedUrl }
+    }))
+    return { ...row, photo_url: data.signedUrl, photo_path: path, dive_log_photos: photos }
   }))
 }
 
-export async function createDiveLog({ userId, photoFile, species, date, depth, latitude, longitude, locationName, visibility }) {
-  const photoPath = await uploadDivePhoto(userId, photoFile)
+export async function createDiveLog({ userId, sightings, date, depth, latitude, longitude, locationName, visibility }) {
+  const photos = await Promise.all(sightings.map(async (sighting) => ({
+    photo_path: await uploadDivePhoto(userId, sighting.file),
+    species: sighting.species.trim(),
+  })))
   const client = requireSupabase()
-  const { data, error } = await client.from('dive_logs').insert({ user_id: userId, photo_url: photoPath, photo_path: photoPath, species, dive_date: date, max_depth_m: depth, latitude, longitude, location_name: locationName, visibility }).select().single()
+  const cover = photos[0]
+  const { data, error } = await client.from('dive_logs').insert({ user_id: userId, photo_url: cover.photo_path, photo_path: cover.photo_path, species: cover.species, dive_date: date, max_depth_m: depth, latitude, longitude, location_name: locationName, visibility }).select().single()
   if (error) throw error
-  return (await signRows([data]))[0]
+  const { error: photosError } = await client.from('dive_log_photos').insert(photos.map((photo) => ({ ...photo, dive_log_id: data.id, user_id: userId })))
+  if (photosError) throw photosError
+  return (await signRows([{ ...data, dive_log_photos: photos }]))[0]
 }
 
 export async function listMyDiveLogs(userId) {
-  const { data, error } = await requireSupabase().from('dive_logs').select('*').eq('user_id', userId).order('dive_date', { ascending: false })
+  const { data, error } = await requireSupabase().from('dive_logs').select('*, dive_log_photos(*)').eq('user_id', userId).order('dive_date', { ascending: false })
   if (error) throw error
   return signRows(data)
 }
@@ -37,8 +48,9 @@ export async function listPublicDiveLogs() {
   const client = requireSupabase()
   const { data, error } = await client
     .from('dive_logs')
-    .select('*')
+    .select('*, dive_log_photos(*)')
     .eq('visibility', 'public')
+    .order('view_count', { ascending: false })
     .order('dive_date', { ascending: false })
     .limit(60)
   if (error) throw error
@@ -81,12 +93,17 @@ export async function saveProfile({ userId, displayName, bio, avatarUrl }) {
 export async function listProfilePublicLogs(userId) {
   const { data, error } = await requireSupabase()
     .from('dive_logs')
-    .select('*')
+    .select('*, dive_log_photos(*)')
     .eq('user_id', userId)
     .eq('visibility', 'public')
     .order('dive_date', { ascending: false })
   if (error) throw error
   return signRows(data)
+}
+
+export async function recordDiveLogView(id) {
+  const { error } = await requireSupabase().rpc('increment_dive_log_views', { log_id: id })
+  if (error) throw error
 }
 
 export async function listFollowing(userId) {
