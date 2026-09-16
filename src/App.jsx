@@ -343,13 +343,7 @@ export default function App() {
         {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
-      <Mobile
-        {...{ view, navigate }}
-        add={() => {
-          navigate("new");
-          setStep(0);
-        }}
-      />
+      <Mobile {...{ view, navigate }} />
     </main>
   );
 }
@@ -786,14 +780,11 @@ function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNoti
     {editing && <form className="profile-form" onSubmit={save}><label>顯示名稱<input required maxLength="40" value={form.displayName} onChange={(e) => setForm((x) => ({...x, displayName:e.target.value}))} /></label><label>個人簡介<textarea maxLength="180" value={form.bio} onChange={(e) => setForm((x) => ({...x, bio:e.target.value}))} placeholder="例如：喜歡微距、珊瑚礁與夜潛。" /></label><label>頭像圖片網址<span className="field-hint">可留空，會使用你的名字縮寫。</span><input type="url" value={form.avatarUrl} onChange={(e) => setForm((x) => ({...x, avatarUrl:e.target.value}))} placeholder="https://…" /></label><button className="primary-button">儲存檔案</button></form>}
     <section className="section-head"><h2>{isOwn ? "我的公開日誌" : "公開日誌"}</h2></section>{!shownLogs.length ? <p className="profile-empty">還沒有公開日誌。</p> : <div className="log-grid">{shownLogs.map((x) => <article className="sighting-card" key={x.id}><div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div><div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p></div></article>)}</div>}</section>;
 }
-function Mobile({ view, navigate, add }) {
+function Mobile({ view, navigate }) {
   return (
     <nav className="mobile-nav">
       <Nav i={<Home />} t="日誌" a={view === "log"} f={() => navigate("log")} />
       <Nav i={<Map />} t="地圖" a={view === "map"} f={() => navigate("map")} />
-      <button className="add-button" onClick={add}>
-        <Plus />
-      </button>
       <Nav
         i={<Compass />}
         t="探索"
