@@ -333,7 +333,7 @@ export default function App() {
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
         {view === "map" && <World logs={logs} />}{" "}
-        {view === "explore" && <Explore logs={publicLogs} following={following} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
+        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
       <Mobile
@@ -731,13 +731,13 @@ function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
   return <span className="profile-avatar profile-avatar-fallback">{(profile?.display_name || fallback).slice(0, 2).toUpperCase()}</span>;
 }
-function Explore({ logs, following, openProfile }) {
+function Explore({ logs, following, loggedIn, login, openProfile }) {
   const [feed, setFeed] = useState("all");
   const visibleLogs = feed === "following" ? logs.filter((log) => following.includes(log.userId)) : logs;
   return (
     <section className="explore-view">
       <div className="explore-copy"><h2>從真實的相遇，認識海底世界。</h2><p>這裡只會出現潛水者自己公開的日誌。</p><div className="feed-switch" role="tablist"><button className={feed === "all" ? "active" : ""} onClick={() => setFeed("all")}>全部公開日誌</button><button className={feed === "following" ? "active" : ""} onClick={() => setFeed("following")}>追蹤中 <span>{following.length}</span></button></div></div>
-      {!visibleLogs.length ? <Empty following={feed === "following"} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
+      {!visibleLogs.length ? <Empty following={feed === "following"} loggedIn={loggedIn} login={login} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
         <div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div>
         <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
           <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" />{x.profile?.display_name || "潛水者"} <span>→</span></button>
@@ -746,7 +746,7 @@ function Explore({ logs, following, openProfile }) {
     </section>
   );
 }
-function Empty({ following = false }) { return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>{following ? "你追蹤的人還沒有公開日誌。" : "社群會由真實的潛水者開始。"}</h2><p>{following ? "先在公開日誌裡追蹤潛水者；他們的新紀錄會出現在這裡。" : "目前沒有公開紀錄，因此不顯示虛構人物或假內容。"}</p></section>; }
+function Empty({ following = false, loggedIn = true, login }) { if (!loggedIn) return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>登入後，查看真實潛水者的公開日誌。</h2><p>公開日誌只會提供給已登入的 Pelagic 使用者；登入後即可探索、開啟潛水者檔案與追蹤他們。</p><button className="primary-button" onClick={login}><UserRound />使用 Google 登入</button></section>; return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>{following ? "你追蹤的人還沒有公開日誌。" : "社群會由真實的潛水者開始。"}</h2><p>{following ? "先在公開日誌裡追蹤潛水者；他們的新紀錄會出現在這裡。" : "目前沒有公開紀錄，因此不顯示虛構人物或假內容。"}</p></section>; }
 function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNotice, following, toggleFollow }) {
   const isOwn = !owner || owner.id === currentUser.id;
   const [shownProfile, setShownProfile] = useState(isOwn ? profile : owner.profile);
