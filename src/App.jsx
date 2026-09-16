@@ -23,6 +23,7 @@ import {
 import { supabase } from "./lib/supabase";
 import {
   createDiveLog,
+  deleteDiveLog,
   followDiver,
   getProfile,
   listMyDiveLogs,
@@ -31,6 +32,7 @@ import {
   listPublicDiveLogs,
   saveProfile,
   unfollowDiver,
+  updateDiveLog,
 } from "./lib/diveLogs";
 
 const blank = () => ({
@@ -74,7 +76,8 @@ export default function App() {
     [profile, setProfile] = useState(null),
     [publicLogs, setPublicLogs] = useState([]),
     [profileOwner, setProfileOwner] = useState(null),
-    [following, setFollowing] = useState([]);
+    [following, setFollowing] = useState([]),
+    [editLog, setEditLog] = useState(null);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth
@@ -94,6 +97,14 @@ export default function App() {
       .then((row) => setProfile(row))
       .catch(() => setNotice("無法讀取個人檔案，請稍後再試"));
     listFollowing(session.user.id).then(setFollowing).catch(() => setNotice("無法讀取追蹤清單，請稍後再試"));
+  }, [session]);
+  useEffect(() => {
+    if (!session) return;
+    const profileId = new URLSearchParams(window.location.hash.slice(1)).get("profile");
+    if (profileId) {
+      setProfileOwner(profileId === session.user.id ? null : { id: profileId, profile: null });
+      setView("profile");
+    }
   }, [session]);
   const toggleFollow = async (personId) => {
     if (!session || personId === session.user.id) return;
@@ -188,6 +199,8 @@ export default function App() {
           ? "記錄這一潛"
           : view === "profile"
             ? "潛水者檔案"
+            : view === "edit"
+              ? "修改這一潛"
             : "社群探索";
   const account = session ? (
     <button
@@ -312,9 +325,11 @@ export default function App() {
             loggedIn={!!session}
             profile={profile}
             openProfile={() => { setProfileOwner(null); setView("profile"); }}
+            edit={(log) => { setEditLog(log); setView("edit"); }}
           />
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
+        {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
         {view === "map" && <World logs={logs} />}{" "}
         {view === "explore" && <Explore logs={publicLogs} following={following} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
@@ -355,7 +370,7 @@ function Nav({ i, t, a, f }) {
     </button>
   );
 }
-function Log({ logs, add, loggedIn, profile, openProfile }) {
+function Log({ logs, add, loggedIn, profile, openProfile, edit }) {
   return (
     <div>
       <section className="intro">
@@ -425,6 +440,8 @@ function Log({ logs, add, loggedIn, profile, openProfile }) {
                     <MapPin size={14} />
                     {x.locationName}
                   </p>
+                  <p className="coordinates">{x.lat.toFixed(5)}, {x.lng.toFixed(5)}</p>
+                  <button className="card-action" onClick={() => edit(x)}>修改這一潛</button>
                 </div>
               </article>
             ))}
@@ -564,6 +581,11 @@ function New({ draft, setDraft, step, setStep, add }) {
             </label>
             <Picker value={draft} onPick={pick} />
             <label>
+              潛點名稱 <span className="unit">可自行修改</span>
+              <input value={draft.locationName} onChange={update("locationName")} placeholder="例如：Blue Corner" required />
+            </label>
+            <p className="coordinates field-coordinates">{draft.lat === null ? "尚未選定座標" : `${draft.lat.toFixed(5)}, ${draft.lng.toFixed(5)}`}</p>
+            <label>
               最大深度 <span className="unit">metres</span>
               <input
                 type="number"
@@ -598,6 +620,17 @@ function New({ draft, setDraft, step, setStep, add }) {
       )}
     </div>
   );
+}
+function EditDive({ log, done, remove }) {
+  const [draft, setDraft] = useState({ species: log.species, date: log.date, depth: log.depth, lat: log.lat, lng: log.lng, locationName: log.locationName, visibility: log.visibility });
+  const [saving, setSaving] = useState(false);
+  const update = (key) => (event) => setDraft((value) => ({ ...value, [key]: event.target.value }));
+  const pick = async ({ lat, lng }) => {
+    setDraft((value) => ({ ...value, lat, lng }));
+    try { const locationName = await reversePlace(lat, lng); setDraft((value) => ({ ...value, locationName })); } catch { /* retain edited name */ }
+  };
+  const save = async (event) => { event.preventDefault(); setSaving(true); try { done(await updateDiveLog({ id: log.id, ...draft })); } finally { setSaving(false); } };
+  return <section className="edit-dive"><div className="details-heading"><h2>修正這一潛。</h2><p>物種、日期、潛點、座標、深度和可見度都可以更新。</p></div><form onSubmit={save} className="edit-form"><label>物種名稱<input required value={draft.species} onChange={update("species")} /></label><label>日期<input required type="date" value={draft.date} onChange={update("date")} /></label><label>潛點名稱<input required value={draft.locationName} onChange={update("locationName")} /></label><Picker value={draft} onPick={pick} /><p className="coordinates field-coordinates">{draft.lat.toFixed(5)}, {draft.lng.toFixed(5)}</p><label>最大深度（metres）<input required min="0" type="number" value={draft.depth} onChange={update("depth")} /></label><label>日誌可見度<select value={draft.visibility} onChange={update("visibility")}><option value="private">僅自己可見</option><option value="public">公開至社群</option></select></label><div className="edit-actions"><button className="primary-button" disabled={saving}>{saving ? "正在儲存…" : "儲存修改"}</button><button className="delete-button" type="button" onClick={() => { if (window.confirm("確定要刪除這一潛嗎？此操作無法復原。")) remove(); }}>刪除日誌</button></div></form></section>;
 }
 function Picker({ value, onPick }) {
   function Click() {
@@ -740,7 +773,8 @@ function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNoti
   }, [isOwn, owner?.id, profile, ownLogs]);
   useEffect(() => setForm({ displayName: profile?.display_name || "", bio: profile?.bio || "", avatarUrl: profile?.avatar_url || "" }), [profile]);
   const save = async (e) => { e.preventDefault(); try { const saved = await saveProfile({ userId: currentUser.id, ...form }); setProfile(saved); setShownProfile(saved); setEditing(false); setNotice("個人檔案已儲存"); } catch (error) { setNotice(`無法儲存個人檔案：${error.message}`); } };
-  return <section className="profile-view"><div className="profile-hero"><ProfileAvatar profile={shownProfile} fallback={isOwn ? currentUser.email : "潛"} /><div><h2>{shownProfile?.display_name || (isOwn ? "為自己命名" : "潛水者")}</h2><p>{shownProfile?.bio || (isOwn ? "讓其他潛水者知道你在海裡尋找什麼。" : "這位潛水者還沒有留下簡介。")}</p></div>{isOwn ? <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((x) => !x)}>{editing ? "取消編輯" : "編輯檔案"}</button><button className="signout-button" onClick={() => supabase.auth.signOut()}>登出</button></div> : <button className={`follow-button ${following.includes(owner.id) ? "is-following" : ""}`} onClick={() => toggleFollow(owner.id)}>{following.includes(owner.id) ? "追蹤中" : "追蹤這位潛水者"}</button>}</div>
+  const share = async () => { await navigator.clipboard.writeText(`${window.location.origin}#profile=${currentUser.id}`); setNotice("個人檔案連結已複製；朋友登入後即可開啟並追蹤你。"); };
+  return <section className="profile-view"><div className="profile-hero"><ProfileAvatar profile={shownProfile} fallback={isOwn ? currentUser.email : "潛"} /><div><h2>{shownProfile?.display_name || (isOwn ? "為自己命名" : "潛水者")}</h2><p>{shownProfile?.bio || (isOwn ? "讓其他潛水者知道你在海裡尋找什麼。" : "這位潛水者還沒有留下簡介。")}</p></div>{isOwn ? <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((x) => !x)}>{editing ? "取消編輯" : "編輯檔案"}</button><button className="secondary-button" onClick={share}>複製個人連結</button><button className="signout-button" onClick={() => supabase.auth.signOut()}>登出</button></div> : <button className={`follow-button ${following.includes(owner.id) ? "is-following" : ""}`} onClick={() => toggleFollow(owner.id)}>{following.includes(owner.id) ? "追蹤中" : "追蹤這位潛水者"}</button>}</div>
     {editing && <form className="profile-form" onSubmit={save}><label>顯示名稱<input required maxLength="40" value={form.displayName} onChange={(e) => setForm((x) => ({...x, displayName:e.target.value}))} /></label><label>個人簡介<textarea maxLength="180" value={form.bio} onChange={(e) => setForm((x) => ({...x, bio:e.target.value}))} placeholder="例如：喜歡微距、珊瑚礁與夜潛。" /></label><label>頭像圖片網址<span className="field-hint">可留空，會使用你的名字縮寫。</span><input type="url" value={form.avatarUrl} onChange={(e) => setForm((x) => ({...x, avatarUrl:e.target.value}))} placeholder="https://…" /></label><button className="primary-button">儲存檔案</button></form>}
     <section className="section-head"><h2>{isOwn ? "我的公開日誌" : "公開日誌"}</h2></section>{!shownLogs.length ? <p className="profile-empty">還沒有公開日誌。</p> : <div className="log-grid">{shownLogs.map((x) => <article className="sighting-card" key={x.id}><div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div><div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p></div></article>)}</div>}</section>;
 }
