@@ -847,7 +847,7 @@ function Moderation({ setNotice }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState(null);
-  useEffect(() => { listModerationDiveLogs().then(setLogs).catch((error) => setNotice(`無法載入審核內容：${error.message}`)).finally(() => setLoading(false)); }, [setNotice]);
+  useEffect(() => { listModerationDiveLogs().then((rows) => setLogs(rows.map(toLog))).catch((error) => setNotice(`無法載入審核內容：${error.message}`)).finally(() => setLoading(false)); }, [setNotice]);
   const remove = async (log) => {
     const owner = log.profile?.display_name || "這位潛水者";
     if (!window.confirm(`確定要刪除 ${owner} 的「${log.locationName}」日誌嗎？所有相片、留言、按讚與收藏都會永久移除，無法復原。`)) return;
