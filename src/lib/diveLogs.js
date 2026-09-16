@@ -30,7 +30,9 @@ export async function createDiveLog({ userId, sightings, date, depth, latitude, 
     species: sighting.species.trim(),
   })))
   const client = requireSupabase()
-  const cover = photos[0]
+  // A named encounter should lead the dive card even when its photo was not
+  // the first one selected. The remaining photos may deliberately be unnamed.
+  const cover = photos.find((photo) => photo.species) || photos[0]
   const { data, error } = await client.from('dive_logs').insert({ user_id: userId, photo_url: cover.photo_path, photo_path: cover.photo_path, species: cover.species, dive_date: date, max_depth_m: depth, latitude, longitude, location_name: locationName, visibility }).select().single()
   if (error) throw error
   const { error: photosError } = await client.from('dive_log_photos').insert(photos.map((photo) => ({ ...photo, dive_log_id: data.id, user_id: userId })))

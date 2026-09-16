@@ -168,6 +168,10 @@ export default function App() {
       setNotice("登入後才能把相片與日誌安全儲存到你的帳戶");
       return false;
     }
+    if (!sightings.some((sighting) => sighting.species.trim())) {
+      setNotice("請至少為一張照片填寫遇見的生物名稱。");
+      return false;
+    }
     const latitude = Number(draft.lat);
     const longitude = normalizeLongitude(draft.lng);
     if (!validCoordinates(latitude, longitude)) {
@@ -585,11 +589,12 @@ function New({ draft, setDraft, step, setStep, add }) {
               <Sparkles size={14} />
               辨識服務尚未連接
             </p>
-            <h2>替每一次相遇，<br />留下名字。</h2>
-            <div className="sighting-names">{sightings.map((sighting, index) => <label key={sighting.image}>照片 {index + 1} 的生物名稱<input placeholder="例如：玳瑁" value={sighting.species} onChange={(event) => setSightings((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, species: event.target.value } : row))} /></label>)}</div>
+            <h2>替至少一次相遇，<br />留下名字。</h2>
+            <p className="field-hint">至少命名一張照片即可繼續；其他未確認的相片可先保留空白，日後再補上。</p>
+            <div className="sighting-names">{sightings.map((sighting, index) => <label key={sighting.image}>照片 {index + 1} 的生物名稱<input placeholder="例如：玳瑁（可留空）" value={sighting.species} onChange={(event) => setSightings((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, species: event.target.value } : row))} /></label>)}</div>
             <button
               className="primary-button"
-              disabled={!sightings.length || sightings.some((sighting) => !sighting.species.trim())}
+              disabled={!sightings.length || !sightings.some((sighting) => sighting.species.trim())}
               onClick={() => setStep(2)}
             >
               <Check />
