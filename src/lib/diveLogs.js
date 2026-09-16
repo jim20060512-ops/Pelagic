@@ -66,6 +66,34 @@ export async function listPublicDiveLogs() {
   return (await signRows(data)).map((row) => ({ ...row, profiles: byId.get(row.user_id) || null }))
 }
 
+export async function getAdminStatus(userId) {
+  const { data, error } = await requireSupabase().from('admin_users').select('user_id').eq('user_id', userId).maybeSingle()
+  if (error) throw error
+  return Boolean(data)
+}
+
+export async function listModerationDiveLogs() {
+  const client = requireSupabase()
+  const { data, error } = await client.from('dive_logs').select('*, dive_log_photos(*)').order('created_at', { ascending: false }).limit(100)
+  if (error) throw error
+  const ids = [...new Set(data.map((row) => row.user_id))]
+  const { data: profiles, error: profileError } = await client.from('profiles').select('id, display_name, avatar_url').in('id', ids)
+  if (profileError) throw profileError
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]))
+  return (await signRows(data)).map((row) => ({ ...row, profiles: byId.get(row.user_id) || null }))
+}
+
+export async function deleteModerationDiveLog(log) {
+  const client = requireSupabase()
+  const photoPaths = [...new Set([log.photo_path, ...(log.dive_log_photos || []).map((photo) => photo.photo_path)].filter(Boolean))]
+  const { error } = await client.from('dive_logs').delete().eq('id', log.id)
+  if (error) throw error
+  if (photoPaths.length) {
+    const { error: storageError } = await client.storage.from('dive-photos').remove(photoPaths)
+    if (storageError) throw storageError
+  }
+}
+
 export async function getProfile(userId) {
   const { data, error } = await requireSupabase().from('profiles').select('*').eq('id', userId).maybeSingle()
   if (error) throw error

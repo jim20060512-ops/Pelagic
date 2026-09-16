@@ -30,6 +30,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
@@ -37,10 +39,13 @@ import {
   addDiveComment,
   createDiveLog,
   deleteDiveLog,
+  deleteModerationDiveLog,
   followDiver,
   getProfile,
   getDiveEngagement,
+  getAdminStatus,
   listMyDiveLogs,
+  listModerationDiveLogs,
   listProfilePublicLogs,
   listFollowing,
   listNotifications,
@@ -113,7 +118,8 @@ export default function App() {
     [editLog, setEditLog] = useState(null),
     [mapFocus, setMapFocus] = useState(null),
     [detailLog, setDetailLog] = useState(null),
-    [notifications, setNotifications] = useState([]);
+    [notifications, setNotifications] = useState([]),
+    [isAdmin, setIsAdmin] = useState(false);
   const navigate = (next) => { window.history.pushState({ view: next }, ""); setView(next); };
   useEffect(() => { const back = (event) => setView(event.state?.view || "log"); window.history.replaceState({ view: "log" }, ""); window.addEventListener("popstate", back); return () => window.removeEventListener("popstate", back); }, []);
   useEffect(() => {
@@ -136,6 +142,7 @@ export default function App() {
       .catch(() => setNotice("無法讀取個人檔案，請稍後再試"));
     listFollowing(session.user.id).then(setFollowing).catch(() => setNotice("無法讀取追蹤清單，請稍後再試"));
     listNotifications(session.user.id).then(setNotifications).catch(() => {});
+    getAdminStatus(session.user.id).then(setIsAdmin).catch(() => setIsAdmin(false));
   }, [session]);
   useEffect(() => {
     if (!session) return;
@@ -253,7 +260,9 @@ export default function App() {
                 ? "潛水日誌"
                 : view === "notifications"
                   ? "通知中心"
-                : "社群探索";
+                  : view === "admin"
+                    ? "內容審核"
+                  : "社群探索";
   const account = session ? (
     <button
       className="account-button"
@@ -299,6 +308,7 @@ export default function App() {
             a={view === "explore"}
             f={() => navigate("explore")}
           />
+          {isAdmin && <Nav i={<ShieldCheck />} t="內容審核" a={view === "admin"} f={() => navigate("admin")} />}
         </nav>
         <div className="rail-bottom">
           {session ? (
@@ -390,9 +400,10 @@ export default function App() {
         {view === "explore" && <Explore logs={publicLogs} following={following} user={session?.user} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
         {view === "detail" && detailLog && <DiveDetail log={detailLog} user={session?.user} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "notifications" && <Notifications items={notifications} />}
+        {view === "admin" && isAdmin && <Moderation setNotice={setNotice} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} openMap={(log) => { setMapFocus(log); navigate("map"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
       </section>
-      <Mobile {...{ view, navigate }} />
+      <Mobile {...{ view, navigate, isAdmin }} />
     </main>
   );
 }
@@ -832,6 +843,19 @@ function SocialActions({ log, user, openDetail }) {
   return <div className="card-social" aria-label="日誌互動"><button aria-label="按讚" className={state.liked ? "is-active" : ""} disabled={busy} onClick={like}><Heart /> <span>{state.likes}</span></button><button aria-label="收藏" className={state.favorited ? "is-active" : ""} disabled={busy} onClick={favorite}><Bookmark /> <span>{state.favorites}</span></button><button aria-label="查看留言" onClick={() => openDetail(log)}><MessageCircle /> <span>{state.comments}</span></button></div>;
 }
 function Notifications({ items }) { const label = { like: "按讚了你的日誌", favorite: "收藏了你的日誌", comment: "留言了你的日誌", follow: "開始追蹤你" }; return <section className="notifications-view"><div className="details-heading"><h2>你的通知</h2><p>只顯示其他潛水者對你做出的真實互動。</p></div>{!items.length ? <section className="empty-log"><div className="empty-mark"><Bell /></div><h2>目前沒有新通知。</h2><p>有人按讚、收藏、留言或追蹤你時，會出現在這裡。</p></section> : <div className="notification-list">{items.map((item) => <article key={item.id} className={item.read_at ? "" : "unread"}><Bell /><div><b>{label[item.kind]}</b><p>{new Date(item.created_at).toLocaleString("zh-TW")}</p></div></article>)}</div>}</section> }
+function Moderation({ setNotice }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState(null);
+  useEffect(() => { listModerationDiveLogs().then(setLogs).catch((error) => setNotice(`無法載入審核內容：${error.message}`)).finally(() => setLoading(false)); }, [setNotice]);
+  const remove = async (log) => {
+    const owner = log.profile?.display_name || "這位潛水者";
+    if (!window.confirm(`確定要刪除 ${owner} 的「${log.locationName}」日誌嗎？所有相片、留言、按讚與收藏都會永久移除，無法復原。`)) return;
+    setRemovingId(log.id);
+    try { await deleteModerationDiveLog(log); setLogs((rows) => rows.filter((row) => row.id !== log.id)); setNotice("已刪除日誌及其所有相片。"); } catch (error) { setNotice(`刪除失敗：${error.message}`); } finally { setRemovingId(null); }
+  };
+  return <section className="moderation-view"><div className="details-heading"><h2>內容審核</h2><p>這裡列出所有用戶的日誌，包括未公開內容。僅在內容與潛水無關、侵犯權利或違反社群規範時刪除。</p></div>{loading ? <p className="moderation-status">正在載入日誌…</p> : !logs.length ? <section className="empty-log"><div className="empty-mark"><ShieldCheck /></div><h2>目前沒有需要審核的日誌。</h2></section> : <div className="moderation-list">{logs.map((log) => <article key={log.id}><img src={log.image} alt={`${log.species || "未命名"} 的上傳照片`} /><div><p className="card-date">{log.date} · {log.visibility === "public" ? "公開" : "私人"}</p><h3>{log.species || "尚未命名"}</h3><p><MapPin size={14} />{log.locationName}</p><small>上傳者：{log.profile?.display_name || "潛水者"} · {log.photos.length} 張相片</small></div><button className="delete-button" disabled={removingId === log.id} onClick={() => remove(log)}><Trash2 />{removingId === log.id ? "正在刪除…" : "刪除日誌"}</button></article>)}</div>}</section>;
+}
 function DiveDetail({ log, user, openProfile }) {
   const [engagement, setEngagement] = useState({ liked: false, favorited: false, comments: [] });
   const [counts, setCounts] = useState({ likes: log.likeCount, favorites: log.favoriteCount, comments: log.commentCount });
@@ -875,7 +899,7 @@ function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNoti
     {editing && <form className="profile-form" onSubmit={save}><label>顯示名稱<input required maxLength="40" value={form.displayName} onChange={(e) => setForm((x) => ({...x, displayName:e.target.value}))} /></label><label>個人簡介<textarea maxLength="180" value={form.bio} onChange={(e) => setForm((x) => ({...x, bio:e.target.value}))} placeholder="例如：喜歡微距、珊瑚礁與夜潛。" /></label><label>頭像圖片網址<span className="field-hint">可留空，會使用你的名字縮寫。</span><input type="url" value={form.avatarUrl} onChange={(e) => setForm((x) => ({...x, avatarUrl:e.target.value}))} placeholder="https://…" /></label><button className="primary-button">儲存檔案</button></form>}
     <section className="section-head"><h2>{isOwn ? "我的公開日誌" : "公開日誌"}</h2></section>{!shownLogs.length ? <p className="profile-empty">還沒有公開日誌。</p> : <div className="log-grid">{shownLogs.map((x) => <article className="sighting-card" key={x.id}><button className="photo-wrap photo-map-link" onClick={() => { recordDiveLogView(x.id).catch(() => {}); openMap(x); }}><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span>{x.photos.length > 1 && <span className="photo-count">{x.photos.length} 張生物照片</span>}<span className="map-link-label">在地圖查看</span></button><div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p><SocialActions log={x} user={currentUser} openDetail={openDetail} /><button className="card-action" onClick={() => openDetail(x)}>查看完整日誌 →</button></div></article>)}</div>}</section>;
 }
-function Mobile({ view, navigate }) {
+function Mobile({ view, navigate, isAdmin }) {
   return (
     <nav className="mobile-nav">
       <Nav i={<Home />} t="日誌" a={view === "log"} f={() => navigate("log")} />
@@ -886,6 +910,7 @@ function Mobile({ view, navigate }) {
         a={view === "explore"}
         f={() => navigate("explore")}
       />
+      {isAdmin && <Nav i={<ShieldCheck />} t="審核" a={view === "admin"} f={() => navigate("admin")} />}
     </nav>
   );
 }
