@@ -382,7 +382,7 @@ function Log({ logs, add, loggedIn, profile, openProfile, edit }) {
         <div>
           <p className="date-stamp">你的私人潛水冊</p>
           <h2>每一潛，都值得被記住。</h2>
-          <p>把相片、深度和那一眼遇見的生命，收進你的海底足跡。</p>
+          <p>把相片、深度和那一眼遇見的事物，收進你的海底足跡。</p>
         </div>
         <button className="text-link" onClick={add}>
           開始新紀錄 <span>→</span>
