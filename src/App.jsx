@@ -5,6 +5,7 @@ import {
   Marker,
   Popup,
   TileLayer,
+  useMap,
   useMapEvents,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -21,6 +22,7 @@ import {
   Send,
   Sparkles,
   UserRound,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import {
@@ -80,6 +82,8 @@ export default function App() {
     [profileOwner, setProfileOwner] = useState(null),
     [following, setFollowing] = useState([]),
     [editLog, setEditLog] = useState(null);
+  const navigate = (next) => { window.history.pushState({ view: next }, ""); setView(next); };
+  useEffect(() => { const back = (event) => setView(event.state?.view || "log"); window.history.replaceState({ view: "log" }, ""); window.addEventListener("popstate", back); return () => window.removeEventListener("popstate", back); }, []);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth
@@ -124,7 +128,7 @@ export default function App() {
     } catch (error) { setNotice(`無法更新追蹤狀態：${error.message}`); }
   };
   useEffect(() => {
-    if (!session || view !== "explore") return;
+    if (!session || (view !== "explore" && view !== "map")) return;
     listPublicDiveLogs()
       .then((rows) => setPublicLogs(rows.map(toLog)))
       .catch(() => setNotice("無法讀取公開日誌，請稍後再試"));
@@ -234,24 +238,24 @@ export default function App() {
             i={<Home />}
             t="日誌"
             a={view === "log"}
-            f={() => setView("log")}
+            f={() => navigate("log")}
           />
           <Nav
             i={<Map />}
             t="地圖"
             a={view === "map"}
-            f={() => setView("map")}
+            f={() => navigate("map")}
           />
           <Nav
             i={<Compass />}
             t="探索"
             a={view === "explore"}
-            f={() => setView("explore")}
+            f={() => navigate("explore")}
           />
         </nav>
         <div className="rail-bottom">
           {session ? (
-            <button className="avatar avatar-button" title="查看個人檔案" onClick={() => { setProfileOwner(null); setView("profile"); }}>
+            <button className="avatar avatar-button" title="查看個人檔案" onClick={() => { setProfileOwner(null); navigate("profile"); }}>
               {initials(session.user.email)}
             </button>
           ) : (
@@ -269,11 +273,12 @@ export default function App() {
             <h1>{title}</h1>
           </div>
           <div className="top-actions">
+            {view !== "log" && <button className="back-button" onClick={() => window.history.back()}><ArrowLeft />返回日誌</button>}
             {account}
             <button
               className="new-dive"
               onClick={() => {
-                setView("new");
+                navigate("new");
                 setStep(0);
               }}
             >
@@ -321,25 +326,25 @@ export default function App() {
           <Log
             logs={logs}
             add={() => {
-              setView("new");
+              navigate("new");
               setStep(0);
             }}
             loggedIn={!!session}
             profile={profile}
-            openProfile={() => { setProfileOwner(null); setView("profile"); }}
-            edit={(log) => { setEditLog(log); setView("edit"); }}
+            openProfile={() => { setProfileOwner(null); navigate("profile"); }}
+            edit={(log) => { setEditLog(log); navigate("edit"); }}
           />
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
-        {view === "map" && <World logs={logs} />}{" "}
-        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
+        {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} />}{" "}
+        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
       <Mobile
-        {...{ view, setView }}
+        {...{ view, navigate }}
         add={() => {
-          setView("new");
+          navigate("new");
           setStep(0);
         }}
       />
@@ -456,6 +461,7 @@ function Log({ logs, add, loggedIn, profile, openProfile, edit }) {
 function New({ draft, setDraft, step, setStep, add }) {
   const [loading, setLoading] = useState(false),
     [saving, setSaving] = useState(false),
+    [address, setAddress] = useState(""),
     [photoFile, setPhotoFile] = useState(null),
     seq = useRef(0),
     last = useRef(0);
@@ -491,6 +497,7 @@ function New({ draft, setDraft, step, setStep, add }) {
     await add(photoFile);
     setSaving(false);
   };
+  const locateAddress = async () => { if (!address.trim()) return; setLoading(true); try { const rows = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(address)}`)).json(); if (rows[0]) { const lat = +rows[0].lat, lng = +rows[0].lon; setDraft((x) => ({ ...x, lat, lng, locationName: rows[0].display_name })); } } finally { setLoading(false); } };
   return (
     <div className="new-dive-flow">
       <div className="dive-meter">
@@ -581,6 +588,10 @@ function New({ draft, setDraft, step, setStep, add }) {
                 {loading ? "正在取得地名…" : draft.locationName || "尚未選定"}
               </span>
             </label>
+            <label>
+              輸入地址／潛點以在地圖定位
+              <span className="address-row"><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="例如：Green Island, Taiwan" /><button type="button" className="secondary-button" onClick={locateAddress} disabled={loading}>定位</button></span>
+            </label>
             <Picker value={draft} onPick={pick} />
             <label>
               潛點名稱 <span className="unit">可自行修改</span>
@@ -658,6 +669,7 @@ function Picker({ value, onPick }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <Click />
+        <MapFlyTo target={value.lat === null ? null : { lat: value.lat, lng: value.lng }} />
       </MapContainer>
       <p>點一下地圖以標記潛點</p>
     </div>
@@ -697,8 +709,14 @@ function Sites({ status }) {
     </CircleMarker>
   ));
 }
-function World({ logs }) {
+function World({ ownLogs, publicLogs, following, loggedIn, login }) {
   const [status, setStatus] = useState("放大地圖以載入該區域的公開潛點");
+  const [layer, setLayer] = useState("mine");
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [target, setTarget] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const logs = layer === "mine" ? ownLogs : layer === "following" ? publicLogs.filter((log) => following.includes(log.userId)) : publicLogs;
+  const searchPlace = async (event) => { event.preventDefault(); if (!placeQuery.trim()) return; setSearching(true); try { const results = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(placeQuery)}`)).json(); if (results[0]) setTarget({ lat: +results[0].lat, lng: +results[0].lon }); else setStatus("找不到這個地點，請換一個名稱再試"); } catch { setStatus("暫時無法搜尋地點"); } finally { setSearching(false); } };
   return (
     <section className="map-view">
       <div className="map-copy">
@@ -707,7 +725,9 @@ function World({ logs }) {
         <br />
         留下你的潛水足跡。
         </h2>
-        <p>公開潛點來自 OpenStreetMap；你的日誌會以橙色圓點標示。</p>
+        <p>以照片標記每一潛；點擊標記即可查看日誌與座標。</p>
+        <form className="map-search" onSubmit={searchPlace}><label>搜尋地點<input value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} placeholder="例如：Green Island, Taiwan" /></label><button className="secondary-button" disabled={searching}>{searching ? "搜尋中…" : "查看地點"}</button></form>
+        <div className="feed-switch map-switch" role="tablist"><button className={layer === "mine" ? "active" : ""} onClick={() => setLayer("mine")}>我的日誌 <span>{ownLogs.length}</span></button><button className={layer === "public" ? "active" : ""} onClick={() => setLayer("public")}>公開日誌 <span>{publicLogs.length}</span></button><button className={layer === "following" ? "active" : ""} onClick={() => setLayer("following")}>追蹤中 <span>{following.length}</span></button></div>
       </div>
       <div className="real-map">
         <MapContainer center={[12, 12]} zoom={2} minZoom={2}>
@@ -716,16 +736,20 @@ function World({ logs }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <Sites status={setStatus} />
+          <MapFlyTo target={target} />
           {logs.map((x) => <PhotoMarker key={x.id} log={x} />)}
         </MapContainer>
         <p className="map-status">{status}</p>
       </div>
+      {!loggedIn && layer !== "mine" && <p className="map-login-note">登入後即可查看其他潛水者與追蹤中的公開日誌。 <button onClick={login}>登入</button></p>}
+      {loggedIn && layer !== "mine" && !logs.length && <p className="map-login-note">{layer === "following" ? "你追蹤的人尚未公開日誌。" : "目前還沒有其他公開日誌。"}</p>}
     </section>
   );
 }
+function MapFlyTo({ target }) { const map = useMap(); useEffect(() => { if (target) map.flyTo([target.lat, target.lng], 11, { duration: 1 }); }, [map, target]); return null; }
 function PhotoMarker({ log }) {
   const icon = divIcon({ className: "map-photo-icon", iconSize: [74, 92], iconAnchor: [37, 88], popupAnchor: [0, -80], html: `<img src="${log.image}" alt=""><span>潛水日誌</span>` });
-  return <Marker position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><img src={log.image} alt={`${log.species} 的水下照片`} /><strong>{log.species}</strong><span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small></div></Popup></Marker>;
+  return <Marker position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><img src={log.image} alt={`${log.species} 的水下照片`} /><strong>{log.species}</strong>{log.profile?.display_name && <em>{log.profile.display_name}</em>}<span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small></div></Popup></Marker>;
 }
 function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
@@ -765,11 +789,11 @@ function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNoti
     {editing && <form className="profile-form" onSubmit={save}><label>顯示名稱<input required maxLength="40" value={form.displayName} onChange={(e) => setForm((x) => ({...x, displayName:e.target.value}))} /></label><label>個人簡介<textarea maxLength="180" value={form.bio} onChange={(e) => setForm((x) => ({...x, bio:e.target.value}))} placeholder="例如：喜歡微距、珊瑚礁與夜潛。" /></label><label>頭像圖片網址<span className="field-hint">可留空，會使用你的名字縮寫。</span><input type="url" value={form.avatarUrl} onChange={(e) => setForm((x) => ({...x, avatarUrl:e.target.value}))} placeholder="https://…" /></label><button className="primary-button">儲存檔案</button></form>}
     <section className="section-head"><h2>{isOwn ? "我的公開日誌" : "公開日誌"}</h2></section>{!shownLogs.length ? <p className="profile-empty">還沒有公開日誌。</p> : <div className="log-grid">{shownLogs.map((x) => <article className="sighting-card" key={x.id}><div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div><div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p></div></article>)}</div>}</section>;
 }
-function Mobile({ view, setView, add }) {
+function Mobile({ view, navigate, add }) {
   return (
     <nav className="mobile-nav">
-      <Nav i={<Home />} t="日誌" a={view === "log"} f={() => setView("log")} />
-      <Nav i={<Map />} t="地圖" a={view === "map"} f={() => setView("map")} />
+      <Nav i={<Home />} t="日誌" a={view === "log"} f={() => navigate("log")} />
+      <Nav i={<Map />} t="地圖" a={view === "map"} f={() => navigate("map")} />
       <button className="add-button" onClick={add}>
         <Plus />
       </button>
@@ -777,7 +801,7 @@ function Mobile({ view, setView, add }) {
         i={<Compass />}
         t="探索"
         a={view === "explore"}
-        f={() => setView("explore")}
+        f={() => navigate("explore")}
       />
     </nav>
   );
