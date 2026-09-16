@@ -81,7 +81,8 @@ export default function App() {
     [publicLogs, setPublicLogs] = useState([]),
     [profileOwner, setProfileOwner] = useState(null),
     [following, setFollowing] = useState([]),
-    [editLog, setEditLog] = useState(null);
+    [editLog, setEditLog] = useState(null),
+    [mapFocus, setMapFocus] = useState(null);
   const navigate = (next) => { window.history.pushState({ view: next }, ""); setView(next); };
   useEffect(() => { const back = (event) => setView(event.state?.view || "log"); window.history.replaceState({ view: "log" }, ""); window.addEventListener("popstate", back); return () => window.removeEventListener("popstate", back); }, []);
   useEffect(() => {
@@ -337,8 +338,8 @@ export default function App() {
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
-        {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} />}{" "}
-        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
+        {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} />}{" "}
+        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
       <Mobile
@@ -709,13 +710,14 @@ function Sites({ status }) {
     </CircleMarker>
   ));
 }
-function World({ ownLogs, publicLogs, following, loggedIn, login }) {
+function World({ ownLogs, publicLogs, following, focus, loggedIn, login }) {
   const [status, setStatus] = useState("放大地圖以載入該區域的公開潛點");
   const [layer, setLayer] = useState("mine");
   const [placeQuery, setPlaceQuery] = useState("");
   const [target, setTarget] = useState(null);
   const [searching, setSearching] = useState(false);
   const logs = layer === "mine" ? ownLogs : layer === "following" ? publicLogs.filter((log) => following.includes(log.userId)) : publicLogs;
+  useEffect(() => { if (focus) { setLayer("public"); setTarget({ lat: focus.lat, lng: focus.lng }); } }, [focus]);
   const searchPlace = async (event) => { event.preventDefault(); if (!placeQuery.trim()) return; setSearching(true); try { const results = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(placeQuery)}`)).json(); if (results[0]) setTarget({ lat: +results[0].lat, lng: +results[0].lon }); else setStatus("找不到這個地點，請換一個名稱再試"); } catch { setStatus("暫時無法搜尋地點"); } finally { setSearching(false); } };
   return (
     <section className="map-view">
@@ -755,16 +757,16 @@ function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
   return <span className="profile-avatar profile-avatar-fallback">{(profile?.display_name || fallback).slice(0, 2).toUpperCase()}</span>;
 }
-function Explore({ logs, following, loggedIn, login, openProfile }) {
+function Explore({ logs, following, loggedIn, login, openMap, openProfile }) {
   const [feed, setFeed] = useState("all");
   const visibleLogs = feed === "following" ? logs.filter((log) => following.includes(log.userId)) : logs;
   return (
     <section className="explore-view">
       <div className="explore-copy"><h2>從真實的相遇，認識海底世界。</h2><p>這裡只會出現潛水者自己公開的日誌。</p><div className="feed-switch" role="tablist"><button className={feed === "all" ? "active" : ""} onClick={() => setFeed("all")}>全部公開日誌</button><button className={feed === "following" ? "active" : ""} onClick={() => setFeed("following")}>追蹤中 <span>{following.length}</span></button></div></div>
       {!visibleLogs.length ? <Empty following={feed === "following"} loggedIn={loggedIn} login={login} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
-        <div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div>
+        <button className="photo-wrap photo-map-link" onClick={() => openMap(x)}><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span><span className="map-link-label">在地圖查看</span></button>
         <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
-          <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" />{x.profile?.display_name || "潛水者"} <span>→</span></button>
+          <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" /><span>上傳者：{x.profile?.display_name || "潛水者"}</span><span>查看檔案 →</span></button>
         </div>
       </article>)}</div>}
     </section>
