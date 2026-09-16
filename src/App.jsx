@@ -26,6 +26,7 @@ import {
   Heart,
   Bookmark,
   MessageCircle,
+  Bell,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import {
@@ -38,8 +39,10 @@ import {
   listMyDiveLogs,
   listProfilePublicLogs,
   listFollowing,
+  listNotifications,
   listPublicDiveLogs,
   recordDiveLogView,
+  markNotificationsRead,
   saveProfile,
   unfollowDiver,
   toggleDiveFavorite,
@@ -92,7 +95,8 @@ export default function App() {
     [following, setFollowing] = useState([]),
     [editLog, setEditLog] = useState(null),
     [mapFocus, setMapFocus] = useState(null),
-    [detailLog, setDetailLog] = useState(null);
+    [detailLog, setDetailLog] = useState(null),
+    [notifications, setNotifications] = useState([]);
   const navigate = (next) => { window.history.pushState({ view: next }, ""); setView(next); };
   useEffect(() => { const back = (event) => setView(event.state?.view || "log"); window.history.replaceState({ view: "log" }, ""); window.addEventListener("popstate", back); return () => window.removeEventListener("popstate", back); }, []);
   useEffect(() => {
@@ -114,6 +118,7 @@ export default function App() {
       .then((row) => setProfile(row))
       .catch(() => setNotice("無法讀取個人檔案，請稍後再試"));
     listFollowing(session.user.id).then(setFollowing).catch(() => setNotice("無法讀取追蹤清單，請稍後再試"));
+    listNotifications(session.user.id).then(setNotifications).catch(() => {});
   }, [session]);
   useEffect(() => {
     if (!session) return;
@@ -219,6 +224,8 @@ export default function App() {
               ? "修改這一潛"
               : view === "detail"
                 ? "潛水日誌"
+                : view === "notifications"
+                  ? "通知中心"
                 : "社群探索";
   const account = session ? (
     <button
@@ -238,6 +245,7 @@ export default function App() {
       登入
     </button>
   );
+  const unread = notifications.filter((item) => !item.read_at).length;
   return (
     <main className="app-shell">
       <aside className="side-rail">
@@ -286,6 +294,7 @@ export default function App() {
           </div>
           <div className="top-actions">
             {view !== "log" && <button className="back-button" onClick={() => window.history.back()}><ArrowLeft />返回日誌</button>}
+            {session && <button className="notification-button" aria-label="通知中心" onClick={async () => { navigate("notifications"); await markNotificationsRead(session.user.id); setNotifications((rows) => rows.map((row) => ({ ...row, read_at: row.read_at || new Date().toISOString() }))); }}><Bell />{unread > 0 && <span>{unread > 9 ? "9+" : unread}</span>}</button>}
             {account}
             <button
               className="new-dive"
@@ -353,6 +362,7 @@ export default function App() {
         {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}{" "}
         {view === "explore" && <Explore logs={publicLogs} following={following} user={session?.user} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
         {view === "detail" && detailLog && <DiveDetail log={detailLog} user={session?.user} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
+        {view === "notifications" && <Notifications items={notifications} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
       <Mobile {...{ view, navigate }} />
@@ -787,6 +797,7 @@ function SocialActions({ log, user, openDetail }) {
   const favorite = async () => { if (!user || busy) return; setBusy(true); try { await toggleDiveFavorite({ logId: log.id, userId: user.id, favorited: state.favorited }); setState((x) => ({ ...x, favorited: !x.favorited, favorites: x.favorites + (x.favorited ? -1 : 1) })); } finally { setBusy(false); } };
   return <div className="card-social" aria-label="日誌互動"><button aria-label="按讚" className={state.liked ? "is-active" : ""} disabled={busy} onClick={like}><Heart /> <span>{state.likes}</span></button><button aria-label="收藏" className={state.favorited ? "is-active" : ""} disabled={busy} onClick={favorite}><Bookmark /> <span>{state.favorites}</span></button><button aria-label="查看留言" onClick={() => openDetail(log)}><MessageCircle /> <span>{state.comments}</span></button></div>;
 }
+function Notifications({ items }) { const label = { like: "按讚了你的日誌", favorite: "收藏了你的日誌", comment: "留言了你的日誌", follow: "開始追蹤你" }; return <section className="notifications-view"><div className="details-heading"><h2>你的通知</h2><p>只顯示其他潛水者對你做出的真實互動。</p></div>{!items.length ? <section className="empty-log"><div className="empty-mark"><Bell /></div><h2>目前沒有新通知。</h2><p>有人按讚、收藏、留言或追蹤你時，會出現在這裡。</p></section> : <div className="notification-list">{items.map((item) => <article key={item.id} className={item.read_at ? "" : "unread"}><Bell /><div><b>{label[item.kind]}</b><p>{new Date(item.created_at).toLocaleString("zh-TW")}</p></div></article>)}</div>}</section> }
 function DiveDetail({ log, user, openProfile }) {
   const [engagement, setEngagement] = useState({ liked: false, favorited: false, comments: [] });
   const [counts, setCounts] = useState({ likes: log.likeCount, favorites: log.favoriteCount, comments: log.commentCount });
