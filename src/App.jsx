@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
+  Marker,
   Popup,
   TileLayer,
   useMapEvents,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { divIcon } from "leaflet";
 import {
   Check,
   Compass,
@@ -714,31 +716,16 @@ function World({ logs }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <Sites status={setStatus} />
-          {logs.map((x) => (
-            <CircleMarker
-              key={x.id}
-              center={[x.lat, x.lng]}
-              radius={10}
-              pathOptions={{
-                color: "#e9f3f6",
-                fillColor: "#e16f4e",
-                fillOpacity: 1,
-              }}
-            >
-              <Popup>
-                <strong>{x.species}</strong>
-                <br />
-                {x.locationName}
-                <br />
-                {x.depth} m
-              </Popup>
-            </CircleMarker>
-          ))}
+          {logs.map((x) => <PhotoMarker key={x.id} log={x} />)}
         </MapContainer>
         <p className="map-status">{status}</p>
       </div>
     </section>
   );
+}
+function PhotoMarker({ log }) {
+  const icon = divIcon({ className: "map-photo-icon", iconSize: [74, 92], iconAnchor: [37, 88], popupAnchor: [0, -80], html: `<img src="${log.image}" alt=""><span>潛水日誌</span>` });
+  return <Marker position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><img src={log.image} alt={`${log.species} 的水下照片`} /><strong>{log.species}</strong><span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small></div></Popup></Marker>;
 }
 function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;

@@ -34,20 +34,25 @@ export async function listMyDiveLogs(userId) {
 }
 
 export async function listPublicDiveLogs() {
-  const { data, error } = await requireSupabase()
+  const client = requireSupabase()
+  const { data, error } = await client
     .from('dive_logs')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*')
     .eq('visibility', 'public')
     .order('dive_date', { ascending: false })
     .limit(60)
   if (error) throw error
-  return signRows(data)
+  const ids = [...new Set(data.map((row) => row.user_id))]
+  const { data: profiles, error: profileError } = await client.from('profiles').select('id, display_name, avatar_url').in('id', ids)
+  if (profileError) throw profileError
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]))
+  return (await signRows(data)).map((row) => ({ ...row, profiles: byId.get(row.user_id) || null }))
 }
 
 export async function getProfile(userId) {
   const { data, error } = await requireSupabase().from('profiles').select('*').eq('id', userId).maybeSingle()
   if (error) throw error
-  return signRows(data)
+  return data
 }
 
 export async function updateDiveLog({ id, species, date, depth, latitude, longitude, locationName, visibility }) {
@@ -81,7 +86,7 @@ export async function listProfilePublicLogs(userId) {
     .eq('visibility', 'public')
     .order('dive_date', { ascending: false })
   if (error) throw error
-  return data
+  return signRows(data)
 }
 
 export async function listFollowing(userId) {
