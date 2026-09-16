@@ -351,7 +351,7 @@ export default function App() {
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
         {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}{" "}
-        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
+        {view === "explore" && <Explore logs={publicLogs} following={following} user={session?.user} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
         {view === "detail" && detailLog && <DiveDetail log={detailLog} user={session?.user} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
@@ -762,7 +762,7 @@ function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
   return <span className="profile-avatar profile-avatar-fallback">{(profile?.display_name || fallback).slice(0, 2).toUpperCase()}</span>;
 }
-function Explore({ logs, following, loggedIn, login, openMap, openProfile, openDetail }) {
+function Explore({ logs, following, user, loggedIn, login, openMap, openProfile, openDetail }) {
   const [feed, setFeed] = useState("all");
   const visibleLogs = feed === "following" ? logs.filter((log) => following.includes(log.userId)) : logs;
   return (
@@ -771,12 +771,21 @@ function Explore({ logs, following, loggedIn, login, openMap, openProfile, openD
       {!visibleLogs.length ? <Empty following={feed === "following"} loggedIn={loggedIn} login={login} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
         <button className="photo-wrap photo-map-link" onClick={() => { recordDiveLogView(x.id).catch(() => {}); openMap(x); }}><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span>{x.photos.length > 1 && <span className="photo-count">{x.photos.length} 張生物照片</span>}<span className="map-link-label">在地圖查看</span></button>
         <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
+          <SocialActions log={x} user={user} openDetail={openDetail} />
           <button className="card-action" onClick={() => openDetail(x)}>查看完整日誌 →</button>
           <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" /><span>上傳者：{x.profile?.display_name || "潛水者"}</span><span>查看檔案 →</span></button>
         </div>
       </article>)}</div>}
     </section>
   );
+}
+function SocialActions({ log, user, openDetail }) {
+  const [state, setState] = useState({ liked: false, favorited: false, likes: log.likeCount, favorites: log.favoriteCount, comments: log.commentCount });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (user) getDiveEngagement({ logId: log.id, userId: user.id }).then((data) => setState((x) => ({ ...x, liked: data.liked, favorited: data.favorited, comments: data.comments.length || log.commentCount }))).catch(() => {}); }, [log.id, user?.id]);
+  const like = async () => { if (!user || busy) return; setBusy(true); try { await toggleDiveLike({ logId: log.id, userId: user.id, liked: state.liked }); setState((x) => ({ ...x, liked: !x.liked, likes: x.likes + (x.liked ? -1 : 1) })); } finally { setBusy(false); } };
+  const favorite = async () => { if (!user || busy) return; setBusy(true); try { await toggleDiveFavorite({ logId: log.id, userId: user.id, favorited: state.favorited }); setState((x) => ({ ...x, favorited: !x.favorited, favorites: x.favorites + (x.favorited ? -1 : 1) })); } finally { setBusy(false); } };
+  return <div className="card-social" aria-label="日誌互動"><button aria-label="按讚" className={state.liked ? "is-active" : ""} disabled={busy} onClick={like}><Heart /> <span>{state.likes}</span></button><button aria-label="收藏" className={state.favorited ? "is-active" : ""} disabled={busy} onClick={favorite}><Bookmark /> <span>{state.favorites}</span></button><button aria-label="查看留言" onClick={() => openDetail(log)}><MessageCircle /> <span>{state.comments}</span></button></div>;
 }
 function DiveDetail({ log, user, openProfile }) {
   const [engagement, setEngagement] = useState({ liked: false, favorited: false, comments: [] });
