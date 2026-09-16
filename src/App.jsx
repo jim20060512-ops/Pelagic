@@ -338,7 +338,7 @@ export default function App() {
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
-        {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} />}{" "}
+        {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}{" "}
         {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
@@ -710,7 +710,7 @@ function Sites({ status }) {
     </CircleMarker>
   ));
 }
-function World({ ownLogs, publicLogs, following, focus, loggedIn, login }) {
+function World({ ownLogs, publicLogs, following, focus, loggedIn, login, openProfile }) {
   const [status, setStatus] = useState("放大地圖以載入該區域的公開潛點");
   const [layer, setLayer] = useState("mine");
   const [placeQuery, setPlaceQuery] = useState("");
@@ -739,7 +739,7 @@ function World({ ownLogs, publicLogs, following, focus, loggedIn, login }) {
           />
           <Sites status={setStatus} />
           <MapFlyTo target={target} />
-          {logs.map((x) => <PhotoMarker key={x.id} log={x} />)}
+          {logs.map((x) => <PhotoMarker key={x.id} log={x} focused={focus?.id === x.id} openProfile={openProfile} />)}
         </MapContainer>
         <p className="map-status">{status}</p>
       </div>
@@ -749,9 +749,15 @@ function World({ ownLogs, publicLogs, following, focus, loggedIn, login }) {
   );
 }
 function MapFlyTo({ target }) { const map = useMap(); useEffect(() => { if (target) map.flyTo([target.lat, target.lng], 11, { duration: 1 }); }, [map, target]); return null; }
-function PhotoMarker({ log }) {
+function PhotoMarker({ log, focused, openProfile }) {
+  const markerRef = useRef(null);
+  useEffect(() => {
+    if (!focused) return;
+    const timer = window.setTimeout(() => markerRef.current?.openPopup(), 450);
+    return () => window.clearTimeout(timer);
+  }, [focused]);
   const icon = divIcon({ className: "map-photo-icon", iconSize: [74, 92], iconAnchor: [37, 88], popupAnchor: [0, -80], html: `<img src="${log.image}" alt=""><span>潛水日誌</span>` });
-  return <Marker position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><img src={log.image} alt={`${log.species} 的水下照片`} /><strong>{log.species}</strong>{log.profile?.display_name && <em>{log.profile.display_name}</em>}<span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small></div></Popup></Marker>;
+  return <Marker ref={markerRef} position={[log.lat, log.lng]} icon={icon}><Popup><div className="map-journal-popup"><img src={log.image} alt={`${log.species} 的水下照片`} /><strong>{log.species}</strong><span>{log.locationName}</span><small>{log.lat.toFixed(5)}, {log.lng.toFixed(5)} · {log.depth} m</small>{log.profile && <button className="popup-author-link" onClick={() => openProfile({ id: log.userId, profile: log.profile })}><ProfileAvatar profile={log.profile} fallback="潛" /><span>查看 {log.profile.display_name || "上傳者"} 的檔案</span></button>}</div></Popup></Marker>;
 }
 function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
