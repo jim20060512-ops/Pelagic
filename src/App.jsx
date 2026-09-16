@@ -21,7 +21,14 @@ import {
   UserRound,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
-import { createDiveLog, listMyDiveLogs } from "./lib/diveLogs";
+import {
+  createDiveLog,
+  getProfile,
+  listMyDiveLogs,
+  listProfilePublicLogs,
+  listPublicDiveLogs,
+  saveProfile,
+} from "./lib/diveLogs";
 
 const blank = () => ({
   image: "",
@@ -31,6 +38,7 @@ const blank = () => ({
   lat: null,
   lng: null,
   locationName: "",
+  visibility: "private",
 });
 async function reversePlace(lat, lng) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1&accept-language=zh-TW`;
@@ -59,7 +67,10 @@ export default function App() {
     [session, setSession] = useState(null),
     [authOpen, setAuthOpen] = useState(false),
     [authEmail, setAuthEmail] = useState(""),
-    [authBusy, setAuthBusy] = useState(false);
+    [authBusy, setAuthBusy] = useState(false),
+    [profile, setProfile] = useState(null),
+    [publicLogs, setPublicLogs] = useState([]),
+    [profileOwner, setProfileOwner] = useState(null);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth
@@ -75,7 +86,16 @@ export default function App() {
     listMyDiveLogs(session.user.id)
       .then((rows) => setLogs(rows.map(toLog)))
       .catch(() => setNotice("無法讀取雲端日誌，請稍後再試"));
+    getProfile(session.user.id)
+      .then((row) => setProfile(row))
+      .catch(() => setNotice("無法讀取個人檔案，請稍後再試"));
   }, [session]);
+  useEffect(() => {
+    if (!session || view !== "explore") return;
+    listPublicDiveLogs()
+      .then((rows) => setPublicLogs(rows.map(toLog)))
+      .catch(() => setNotice("無法讀取公開日誌，請稍後再試"));
+  }, [session, view]);
   const add = async (photoFile) => {
     if (!session) {
       setAuthOpen(true);
@@ -92,6 +112,7 @@ export default function App() {
         latitude: draft.lat,
         longitude: draft.lng,
         locationName: draft.locationName,
+        visibility: draft.visibility,
       });
       setLogs((x) => [toLog(row), ...x]);
       setDraft(blank());
@@ -143,17 +164,22 @@ export default function App() {
       ? "Dive log"
       : view === "map"
         ? "全球潛點"
-        : view === "new"
+          : view === "new"
           ? "記錄這一潛"
-          : "社群探索";
+          : view === "profile"
+            ? "潛水者檔案"
+            : "社群探索";
   const account = session ? (
     <button
       className="account-button"
       title={session.user.email}
-      onClick={() => supabase.auth.signOut()}
+      onClick={() => {
+        setProfileOwner(null);
+        setView("profile");
+      }}
     >
       <span className="avatar">{initials(session.user.email)}</span>
-      <span>登出</span>
+      <span>我的檔案</span>
     </button>
   ) : (
     <button className="account-button" onClick={() => setAuthOpen((x) => !x)}>
@@ -190,9 +216,9 @@ export default function App() {
         </nav>
         <div className="rail-bottom">
           {session ? (
-            <div className="avatar" title={session.user.email}>
+            <button className="avatar avatar-button" title="查看個人檔案" onClick={() => { setProfileOwner(null); setView("profile"); }}>
               {initials(session.user.email)}
-            </div>
+            </button>
           ) : (
             <button className="rail-login" onClick={() => setAuthOpen(true)}>
               <UserRound />
@@ -264,11 +290,14 @@ export default function App() {
               setStep(0);
             }}
             loggedIn={!!session}
+            profile={profile}
+            openProfile={() => { setProfileOwner(null); setView("profile"); }}
           />
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "map" && <World logs={logs} />}{" "}
-        {view === "explore" && <Empty />}
+        {view === "explore" && <Explore logs={publicLogs} openProfile={(owner) => { setProfileOwner(owner); setView("profile"); }} />}
+        {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} />}
       </section>
       <Mobile
         {...{ view, setView }}
@@ -283,6 +312,7 @@ export default function App() {
 function toLog(x) {
   return {
     id: x.id,
+    userId: x.user_id,
     image: x.photo_url,
     species: x.species,
     date: x.dive_date,
@@ -290,6 +320,8 @@ function toLog(x) {
     lat: x.latitude,
     lng: x.longitude,
     locationName: x.location_name,
+    visibility: x.visibility,
+    profile: x.profiles || null,
   };
 }
 function initials(email = "") {
@@ -303,7 +335,7 @@ function Nav({ i, t, a, f }) {
     </button>
   );
 }
-function Log({ logs, add, loggedIn }) {
+function Log({ logs, add, loggedIn, profile, openProfile }) {
   return (
     <div>
       <section className="intro">
@@ -316,6 +348,13 @@ function Log({ logs, add, loggedIn }) {
           開始新紀錄 <span>→</span>
         </button>
       </section>
+      {loggedIn && (
+        <button className="profile-strip" onClick={openProfile}>
+          <ProfileAvatar profile={profile} fallback="我" />
+          <span><b>{profile?.display_name || "設定你的潛水者名字"}</b><small>{profile?.bio || "建立一張屬於你的潛水名片"}</small></span>
+          <em>編輯檔案 →</em>
+        </button>
+      )}
       {!logs.length ? (
         <section className="empty-log">
           <div className="empty-mark">
@@ -514,6 +553,14 @@ function New({ draft, setDraft, step, setStep, add }) {
                 required
               />
             </label>
+            <label>
+              日誌可見度
+              <select value={draft.visibility} onChange={update("visibility")}>
+                <option value="private">僅自己可見</option>
+                <option value="public">公開至社群</option>
+              </select>
+              <span className="field-hint">公開後會出現在真實潛水者的探索頁與你的個人檔案。</span>
+            </label>
             <button
               className="publish-button"
               disabled={draft.lat === null || loading || saving}
@@ -640,16 +687,40 @@ function World({ logs }) {
     </section>
   );
 }
-function Empty() {
+function ProfileAvatar({ profile, fallback }) {
+  if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
+  return <span className="profile-avatar profile-avatar-fallback">{(profile?.display_name || fallback).slice(0, 2).toUpperCase()}</span>;
+}
+function Explore({ logs, openProfile }) {
   return (
-    <section className="empty-log community-empty">
-      <div className="empty-mark">
-        <UserRound />
-      </div>
-      <h2>社群會由真實的潛水者開始。</h2>
-      <p>目前沒有公開紀錄，因此不顯示虛構人物或假內容。</p>
+    <section className="explore-view">
+      <div className="explore-copy"><h2>從真實的相遇，認識海底世界。</h2><p>這裡只會出現潛水者自己公開的日誌。</p></div>
+      {!logs.length ? <Empty /> : <div className="log-grid">{logs.map((x) => <article className="sighting-card" key={x.id}>
+        <div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div>
+        <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
+          <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" />{x.profile?.display_name || "潛水者"} <span>→</span></button>
+        </div>
+      </article>)}</div>}
     </section>
   );
+}
+function Empty() { return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>社群會由真實的潛水者開始。</h2><p>目前沒有公開紀錄，因此不顯示虛構人物或假內容。</p></section>; }
+function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNotice }) {
+  const isOwn = !owner || owner.id === currentUser.id;
+  const [shownProfile, setShownProfile] = useState(isOwn ? profile : owner.profile);
+  const [shownLogs, setShownLogs] = useState(isOwn ? ownLogs.filter((x) => x.visibility === "public") : []);
+  const [form, setForm] = useState({ displayName: "", bio: "", avatarUrl: "" });
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (isOwn) { setShownProfile(profile); setShownLogs(ownLogs.filter((x) => x.visibility === "public")); return; }
+    getProfile(owner.id).then(setShownProfile);
+    listProfilePublicLogs(owner.id).then((rows) => setShownLogs(rows.map(toLog)));
+  }, [isOwn, owner?.id, profile, ownLogs]);
+  useEffect(() => setForm({ displayName: profile?.display_name || "", bio: profile?.bio || "", avatarUrl: profile?.avatar_url || "" }), [profile]);
+  const save = async (e) => { e.preventDefault(); try { const saved = await saveProfile({ userId: currentUser.id, ...form }); setProfile(saved); setShownProfile(saved); setEditing(false); setNotice("個人檔案已儲存"); } catch (error) { setNotice(`無法儲存個人檔案：${error.message}`); } };
+  return <section className="profile-view"><div className="profile-hero"><ProfileAvatar profile={shownProfile} fallback={isOwn ? currentUser.email : "潛"} /><div><h2>{shownProfile?.display_name || (isOwn ? "為自己命名" : "潛水者")}</h2><p>{shownProfile?.bio || (isOwn ? "讓其他潛水者知道你在海裡尋找什麼。" : "這位潛水者還沒有留下簡介。")}</p></div>{isOwn && <div className="profile-actions"><button className="secondary-button" onClick={() => setEditing((x) => !x)}>{editing ? "取消編輯" : "編輯檔案"}</button><button className="signout-button" onClick={() => supabase.auth.signOut()}>登出</button></div>}</div>
+    {editing && <form className="profile-form" onSubmit={save}><label>顯示名稱<input required maxLength="40" value={form.displayName} onChange={(e) => setForm((x) => ({...x, displayName:e.target.value}))} /></label><label>個人簡介<textarea maxLength="180" value={form.bio} onChange={(e) => setForm((x) => ({...x, bio:e.target.value}))} placeholder="例如：喜歡微距、珊瑚礁與夜潛。" /></label><label>頭像圖片網址<span className="field-hint">可留空，會使用你的名字縮寫。</span><input type="url" value={form.avatarUrl} onChange={(e) => setForm((x) => ({...x, avatarUrl:e.target.value}))} placeholder="https://…" /></label><button className="primary-button">儲存檔案</button></form>}
+    <section className="section-head"><h2>{isOwn ? "我的公開日誌" : "公開日誌"}</h2></section>{!shownLogs.length ? <p className="profile-empty">還沒有公開日誌。</p> : <div className="log-grid">{shownLogs.map((x) => <article className="sighting-card" key={x.id}><div className="photo-wrap"><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span></div><div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p></div></article>)}</div>}</section>;
 }
 function Mobile({ view, setView, add }) {
   return (
