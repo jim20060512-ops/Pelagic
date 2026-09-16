@@ -50,6 +50,9 @@ export async function listPublicDiveLogs() {
     .from('dive_logs')
     .select('*, dive_log_photos(*)')
     .eq('visibility', 'public')
+    .order('like_count', { ascending: false })
+    .order('comment_count', { ascending: false })
+    .order('favorite_count', { ascending: false })
     .order('view_count', { ascending: false })
     .order('dive_date', { ascending: false })
     .limit(60)
@@ -104,6 +107,39 @@ export async function listProfilePublicLogs(userId) {
 export async function recordDiveLogView(id) {
   const { error } = await requireSupabase().rpc('increment_dive_log_views', { log_id: id })
   if (error) throw error
+}
+
+export async function getDiveEngagement({ logId, userId }) {
+  const client = requireSupabase()
+  const [{ data: likes, error: likesError }, { data: favorites, error: favoritesError }, { data: comments, error: commentsError }] = await Promise.all([
+    client.from('dive_log_likes').select('user_id').eq('dive_log_id', logId),
+    client.from('dive_log_favorites').select('user_id').eq('dive_log_id', logId).eq('user_id', userId),
+    client.from('dive_log_comments').select('*').eq('dive_log_id', logId).order('created_at', { ascending: true }),
+  ])
+  if (likesError || favoritesError || commentsError) throw likesError || favoritesError || commentsError
+  const ids = [...new Set(comments.map((comment) => comment.user_id))]
+  const { data: profiles, error: profileError } = ids.length ? await client.from('profiles').select('id, display_name, avatar_url').in('id', ids) : { data: [], error: null }
+  if (profileError) throw profileError
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]))
+  return { liked: likes.some((like) => like.user_id === userId), favorited: favorites.length > 0, comments: comments.map((comment) => ({ ...comment, profile: byId.get(comment.user_id) })) }
+}
+
+export async function toggleDiveLike({ logId, userId, liked }) {
+  const client = requireSupabase()
+  const query = liked ? client.from('dive_log_likes').delete().eq('dive_log_id', logId).eq('user_id', userId) : client.from('dive_log_likes').insert({ dive_log_id: logId, user_id: userId })
+  const { error } = await query
+  if (error) throw error
+}
+export async function toggleDiveFavorite({ logId, userId, favorited }) {
+  const client = requireSupabase()
+  const query = favorited ? client.from('dive_log_favorites').delete().eq('dive_log_id', logId).eq('user_id', userId) : client.from('dive_log_favorites').insert({ dive_log_id: logId, user_id: userId })
+  const { error } = await query
+  if (error) throw error
+}
+export async function addDiveComment({ logId, userId, body }) {
+  const { data, error } = await requireSupabase().from('dive_log_comments').insert({ dive_log_id: logId, user_id: userId, body: body.trim() }).select().single()
+  if (error) throw error
+  return data
 }
 
 export async function listFollowing(userId) {

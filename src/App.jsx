@@ -23,13 +23,18 @@ import {
   Sparkles,
   UserRound,
   ArrowLeft,
+  Heart,
+  Bookmark,
+  MessageCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import {
+  addDiveComment,
   createDiveLog,
   deleteDiveLog,
   followDiver,
   getProfile,
+  getDiveEngagement,
   listMyDiveLogs,
   listProfilePublicLogs,
   listFollowing,
@@ -37,6 +42,8 @@ import {
   recordDiveLogView,
   saveProfile,
   unfollowDiver,
+  toggleDiveFavorite,
+  toggleDiveLike,
   updateDiveLog,
 } from "./lib/diveLogs";
 
@@ -84,7 +91,8 @@ export default function App() {
     [profileOwner, setProfileOwner] = useState(null),
     [following, setFollowing] = useState([]),
     [editLog, setEditLog] = useState(null),
-    [mapFocus, setMapFocus] = useState(null);
+    [mapFocus, setMapFocus] = useState(null),
+    [detailLog, setDetailLog] = useState(null);
   const navigate = (next) => { window.history.pushState({ view: next }, ""); setView(next); };
   useEffect(() => { const back = (event) => setView(event.state?.view || "log"); window.history.replaceState({ view: "log" }, ""); window.addEventListener("popstate", back); return () => window.removeEventListener("popstate", back); }, []);
   useEffect(() => {
@@ -335,12 +343,14 @@ export default function App() {
             profile={profile}
             openProfile={() => { setProfileOwner(null); navigate("profile"); }}
             edit={(log) => { setEditLog(log); navigate("edit"); }}
+            openDetail={(log) => { setDetailLog(log); navigate("detail"); }}
           />
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
         {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
         {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}{" "}
-        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
+        {view === "explore" && <Explore logs={publicLogs} following={following} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
+        {view === "detail" && detailLog && <DiveDetail log={detailLog} user={session?.user} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
         {view === "profile" && session && <ProfilePage currentUser={session.user} profile={profile} setProfile={setProfile} owner={profileOwner} ownLogs={logs} setNotice={setNotice} following={following} toggleFollow={toggleFollow} />}
       </section>
       <Mobile {...{ view, navigate }} />
@@ -355,6 +365,9 @@ function toLog(x) {
     species: x.species,
     photos: x.dive_log_photos || [],
     viewCount: x.view_count || 0,
+    likeCount: x.like_count || 0,
+    favoriteCount: x.favorite_count || 0,
+    commentCount: x.comment_count || 0,
     date: x.dive_date,
     depth: x.max_depth_m,
     lat: x.latitude,
@@ -375,7 +388,7 @@ function Nav({ i, t, a, f }) {
     </button>
   );
 }
-function Log({ logs, add, loggedIn, profile, openProfile, edit }) {
+function Log({ logs, add, loggedIn, profile, openProfile, edit, openDetail }) {
   return (
     <div>
       <section className="intro">
@@ -434,10 +447,11 @@ function Log({ logs, add, loggedIn, profile, openProfile, edit }) {
           <div className="log-grid">
             {logs.map((x) => (
               <article className="sighting-card" key={x.id}>
-                <div className="photo-wrap">
+                <button className="photo-wrap photo-map-link" onClick={() => openDetail(x)}>
                   <img src={x.image} alt={`${x.species} 的水下照片`} />
                   <span className="depth-tag">{x.depth} m</span>
-                </div>
+                  <span className="map-link-label">查看日誌</span>
+                </button>
                 <div className="sighting-copy">
                   <p className="card-date">{x.date}</p>
                   <h3>{x.species}</h3>
@@ -746,7 +760,7 @@ function ProfileAvatar({ profile, fallback }) {
   if (profile?.avatar_url) return <img className="profile-avatar" src={profile.avatar_url} alt="" />;
   return <span className="profile-avatar profile-avatar-fallback">{(profile?.display_name || fallback).slice(0, 2).toUpperCase()}</span>;
 }
-function Explore({ logs, following, loggedIn, login, openMap, openProfile }) {
+function Explore({ logs, following, loggedIn, login, openMap, openProfile, openDetail }) {
   const [feed, setFeed] = useState("all");
   const visibleLogs = feed === "following" ? logs.filter((log) => following.includes(log.userId)) : logs;
   return (
@@ -755,11 +769,25 @@ function Explore({ logs, following, loggedIn, login, openMap, openProfile }) {
       {!visibleLogs.length ? <Empty following={feed === "following"} loggedIn={loggedIn} login={login} /> : <div className="log-grid">{visibleLogs.map((x) => <article className="sighting-card" key={x.id}>
         <button className="photo-wrap photo-map-link" onClick={() => { recordDiveLogView(x.id).catch(() => {}); openMap(x); }}><img src={x.image} alt={`${x.species} 的水下照片`} /><span className="depth-tag">{x.depth} m</span>{x.photos.length > 1 && <span className="photo-count">{x.photos.length} 張生物照片</span>}<span className="map-link-label">在地圖查看</span></button>
         <div className="sighting-copy"><p className="card-date">{x.date}</p><h3>{x.species}</h3><p className="site"><MapPin size={14} />{x.locationName}</p>
+          <button className="card-action" onClick={() => openDetail(x)}>查看完整日誌 →</button>
           <button className="author-link" onClick={() => openProfile({ id: x.userId, profile: x.profile })}><ProfileAvatar profile={x.profile} fallback="潛" /><span>上傳者：{x.profile?.display_name || "潛水者"}</span><span>查看檔案 →</span></button>
         </div>
       </article>)}</div>}
     </section>
   );
+}
+function DiveDetail({ log, user, openProfile }) {
+  const [engagement, setEngagement] = useState({ liked: false, favorited: false, comments: [] });
+  const [counts, setCounts] = useState({ likes: log.likeCount, favorites: log.favoriteCount, comments: log.commentCount });
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const isPublic = log.visibility === "public";
+  useEffect(() => { if (user && isPublic) getDiveEngagement({ logId: log.id, userId: user.id }).then(setEngagement).catch(() => {}); }, [log.id, user?.id, isPublic]);
+  const toggleLike = async () => { if (!user || busy) return; setBusy(true); try { await toggleDiveLike({ logId: log.id, userId: user.id, liked: engagement.liked }); setEngagement((x) => ({ ...x, liked: !x.liked })); setCounts((x) => ({ ...x, likes: x.likes + (engagement.liked ? -1 : 1) })); } finally { setBusy(false); } };
+  const toggleFavorite = async () => { if (!user || busy) return; setBusy(true); try { await toggleDiveFavorite({ logId: log.id, userId: user.id, favorited: engagement.favorited }); setEngagement((x) => ({ ...x, favorited: !x.favorited })); setCounts((x) => ({ ...x, favorites: x.favorites + (engagement.favorited ? -1 : 1) })); } finally { setBusy(false); } };
+  const submitComment = async (event) => { event.preventDefault(); if (!user || !comment.trim() || busy) return; setBusy(true); try { const row = await addDiveComment({ logId: log.id, userId: user.id, body: comment }); setEngagement((x) => ({ ...x, comments: [...x.comments, { ...row, profile: null }] })); setCounts((x) => ({ ...x, comments: x.comments + 1 })); setComment(""); } finally { setBusy(false); } };
+  const photos = log.photos.length ? log.photos : [{ photo_url: log.image, species: log.species }];
+  return <section className="dive-detail"><header className="detail-header"><div><p className="card-date">{log.date} · {log.depth} METRES</p><h2>{log.locationName}</h2><p>{photos.length} 張照片 · {photos.length} 次相遇</p></div>{log.profile && <button className="detail-author" onClick={() => openProfile({ id: log.userId, profile: log.profile })}><ProfileAvatar profile={log.profile} fallback="潛" /><span>上傳者<br /><b>{log.profile.display_name || "潛水者"}</b></span><em>查看檔案 →</em></button>}</header><div className="detail-gallery">{photos.map((photo) => <figure key={photo.id || photo.photo_url}><img src={photo.photo_url} alt={`${photo.species} 的水下照片`} /><figcaption>{photo.species}</figcaption></figure>)}</div><section className="detail-meta"><p><MapPin size={16} /> {log.locationName}</p><p>{log.lat.toFixed(5)}, {log.lng.toFixed(5)}</p></section>{isPublic && <section className="detail-interactions"><div><button className={engagement.liked ? "is-active" : ""} disabled={busy} onClick={toggleLike}><Heart /> {counts.likes}</button><button className={engagement.favorited ? "is-active" : ""} disabled={busy} onClick={toggleFavorite}><Bookmark /> {counts.favorites}</button><span><MessageCircle /> {counts.comments}</span></div><form onSubmit={submitComment}><label>留下留言<input maxLength="500" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="分享你在這個潛點的觀察…" /></label><button className="primary-button" disabled={!comment.trim() || busy}>發表</button></form><div className="comment-list">{!engagement.comments.length ? <p>還沒有留言。成為第一位留下觀察的人。</p> : engagement.comments.map((item) => <article key={item.id}><ProfileAvatar profile={item.profile} fallback={item.user_id === user?.id ? "我" : "潛"} /><div><b>{item.profile?.display_name || (item.user_id === user?.id ? "你" : "潛水者")}</b><p>{item.body}</p></div></article>)}</div></section>}</section>;
 }
 function Empty({ following = false, loggedIn = true, login }) { if (!loggedIn) return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>登入後，查看真實潛水者的公開日誌。</h2><p>公開日誌只會提供給已登入的 Pelagic 使用者；登入後即可探索、開啟潛水者檔案與追蹤他們。</p><button className="primary-button" onClick={login}><UserRound />使用 Google 登入</button></section>; return <section className="empty-log community-empty"><div className="empty-mark"><UserRound /></div><h2>{following ? "你追蹤的人還沒有公開日誌。" : "社群會由真實的潛水者開始。"}</h2><p>{following ? "先在公開日誌裡追蹤潛水者；他們的新紀錄會出現在這裡。" : "目前沒有公開紀錄，因此不顯示虛構人物或假內容。"}</p></section>; }
 function ProfilePage({ currentUser, profile, setProfile, owner, ownLogs, setNotice, following, toggleFollow }) {
