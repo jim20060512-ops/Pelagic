@@ -106,9 +106,15 @@ export async function updateDiveLog({ id, species, date, depth, latitude, longit
   return (await signRows([data]))[0]
 }
 
-export async function deleteDiveLog(id) {
-  const { error } = await requireSupabase().from('dive_logs').delete().eq('id', id)
+export async function deleteDiveLog(log) {
+  const client = requireSupabase()
+  const photoPaths = [...new Set([log.photoPath, ...(log.photos || []).map((photo) => photo.photo_path)].filter(Boolean))]
+  const { error } = await client.from('dive_logs').delete().eq('id', log.id)
   if (error) throw error
+  if (photoPaths.length) {
+    const { error: storageError } = await client.storage.from('dive-photos').remove(photoPaths)
+    if (storageError) throw storageError
+  }
 }
 
 export async function saveProfile({ userId, displayName, bio, avatarUrl }) {

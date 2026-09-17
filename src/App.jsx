@@ -392,11 +392,21 @@ export default function App() {
             profile={profile}
             openProfile={() => { setProfileOwner(null); navigate("profile"); }}
             edit={(log) => { setEditLog(log); navigate("edit"); }}
+            remove={async (log) => {
+              if (!window.confirm("確定要刪除這一潛嗎？日誌、照片及所有互動都會一併移除，無法復原。")) return;
+              try {
+                await deleteDiveLog(log);
+                setLogs((rows) => rows.filter((row) => row.id !== log.id));
+                setNotice("日誌已刪除");
+              } catch (error) {
+                setNotice(`無法刪除日誌：${error.message}`);
+              }
+            }}
             openDetail={(log) => { setDetailLog(log); navigate("detail"); }}
           />
         )}{" "}
         {view === "new" && <New {...{ draft, setDraft, step, setStep, add }} />}
-        {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} remove={async () => { await deleteDiveLog(editLog.id); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); }} />}
+        {view === "edit" && editLog && <EditDive log={editLog} done={(next) => { setLogs((rows) => rows.map((row) => row.id === next.id ? toLog(next) : row)); setView("log"); setNotice("日誌已更新"); }} fail={(message) => setNotice(message)} remove={async () => { try { await deleteDiveLog(editLog); setLogs((rows) => rows.filter((row) => row.id !== editLog.id)); setView("log"); setNotice("日誌已刪除"); } catch (error) { setNotice(`無法刪除日誌：${error.message}`); } }} />}
         {view === "map" && <World ownLogs={logs} publicLogs={publicLogs} following={following} focus={mapFocus} loggedIn={!!session} login={() => setAuthOpen(true)} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}{" "}
         {view === "explore" && <Explore logs={publicLogs} following={following} user={session?.user} loggedIn={!!session} login={() => setAuthOpen(true)} openMap={(log) => { setMapFocus(log); navigate("map"); }} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} openDetail={(log) => { setDetailLog(log); navigate("detail"); }} />}
         {view === "detail" && detailLog && <DiveDetail log={detailLog} user={session?.user} openProfile={(owner) => { setProfileOwner(owner); navigate("profile"); }} />}
@@ -413,6 +423,7 @@ function toLog(x) {
     id: x.id,
     userId: x.user_id,
     image: x.photo_url,
+    photoPath: x.photo_path,
     species: x.species,
     photos: x.dive_log_photos || [],
     viewCount: x.view_count || 0,
@@ -439,7 +450,7 @@ function Nav({ i, t, a, f }) {
     </button>
   );
 }
-function Log({ logs, add, loggedIn, profile, openProfile, edit, openDetail }) {
+function Log({ logs, add, loggedIn, profile, openProfile, edit, remove, openDetail }) {
   return (
     <div>
       <section className="intro">
@@ -511,7 +522,10 @@ function Log({ logs, add, loggedIn, profile, openProfile, edit, openDetail }) {
                     {x.locationName}
                   </p>
                   <p className="coordinates">{x.lat.toFixed(5)}, {x.lng.toFixed(5)}</p>
-                  <button className="card-action" onClick={() => edit(x)}>修改這一潛</button>
+                  <div className="own-log-actions">
+                    <button className="card-action" onClick={() => edit(x)}>修改日誌 →</button>
+                    <button className="card-delete-action" onClick={() => remove(x)}>刪除</button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -686,7 +700,7 @@ function New({ draft, setDraft, step, setStep, add }) {
     </div>
   );
 }
-function EditDive({ log, done, remove }) {
+function EditDive({ log, done, fail, remove }) {
   const [draft, setDraft] = useState({ species: log.species, date: log.date, depth: log.depth, lat: log.lat, lng: log.lng, locationName: log.locationName, visibility: log.visibility });
   const [saving, setSaving] = useState(false);
   const update = (key) => (event) => setDraft((value) => ({ ...value, [key]: event.target.value }));
@@ -696,7 +710,7 @@ function EditDive({ log, done, remove }) {
     setDraft((value) => ({ ...value, lat, lng: safeLng }));
     try { const locationName = await reversePlace(lat, safeLng); setDraft((value) => ({ ...value, locationName })); } catch { /* retain edited name */ }
   };
-  const save = async (event) => { event.preventDefault(); const longitude = normalizeLongitude(draft.lng); if (!validCoordinates(draft.lat, longitude)) return; setSaving(true); try { done(await updateDiveLog({ id: log.id, ...draft, lng: longitude })); } finally { setSaving(false); } };
+  const save = async (event) => { event.preventDefault(); const longitude = normalizeLongitude(draft.lng); if (!validCoordinates(draft.lat, longitude)) return; setSaving(true); try { done(await updateDiveLog({ id: log.id, species: draft.species, date: draft.date, depth: draft.depth, latitude: draft.lat, longitude, locationName: draft.locationName, visibility: draft.visibility })); } catch (error) { fail(`無法儲存修改：${error.message}`); } finally { setSaving(false); } };
   return <section className="edit-dive"><div className="details-heading"><h2>修正這一潛。</h2><p>物種、日期、潛點、座標、深度和可見度都可以更新。</p></div><form onSubmit={save} className="edit-form"><label>物種名稱<input required value={draft.species} onChange={update("species")} /></label><label>日期<input required type="date" value={draft.date} onChange={update("date")} /></label><label>潛點名稱<input required value={draft.locationName} onChange={update("locationName")} /></label><Picker value={draft} onPick={pick} /><p className="coordinates field-coordinates">{draft.lat.toFixed(5)}, {draft.lng.toFixed(5)}</p><label>最大深度（metres）<input required min="0" type="number" value={draft.depth} onChange={update("depth")} /></label><label>日誌可見度<select value={draft.visibility} onChange={update("visibility")}><option value="private">僅自己可見</option><option value="public">公開至社群</option></select></label><div className="edit-actions"><button className="primary-button" disabled={saving}>{saving ? "正在儲存…" : "儲存修改"}</button><button className="delete-button" type="button" onClick={() => { if (window.confirm("確定要刪除這一潛嗎？此操作無法復原。")) remove(); }}>刪除日誌</button></div></form></section>;
 }
 function Picker({ value, onPick }) {
