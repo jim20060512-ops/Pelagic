@@ -33,6 +33,8 @@ import {
   ShieldCheck,
   Trash2,
   X,
+  KeyRound,
+  LoaderCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import {
@@ -83,6 +85,43 @@ function normalizeLongitude(value) {
 function validCoordinates(lat, lng) {
   return Number.isFinite(Number(lat)) && Math.abs(Number(lat)) <= 90 &&
     Number.isFinite(Number(lng)) && Math.abs(Number(lng)) <= 180;
+}
+function readPhotoAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("無法讀取這張相片"));
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+function speciesFromAiReply(content) {
+  const raw = typeof content === "string" ? content : "";
+  const json = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || raw;
+  try {
+    const parsed = JSON.parse(json.trim());
+    const name = parsed.species || parsed.name || parsed.common_name;
+    if (typeof name === "string" && name.trim()) return name.trim();
+  } catch { /* A provider may return prose instead of the requested JSON. */ }
+  throw new Error("AI 沒有回傳可使用的物種名稱，請改為手動輸入");
+}
+async function identifyPhotoWithApi(file, config) {
+  const image = await readPhotoAsDataUrl(file);
+  const response = await fetch(config.endpoint.trim(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey.trim()}` },
+    body: JSON.stringify({
+      model: config.model.trim(),
+      temperature: 0.1,
+      max_tokens: 120,
+      messages: [
+        { role: "system", content: "你是海洋生物辨識助手。根據照片辨識最可能的海洋生物或珊瑚，使用繁體中文常用名稱；不確定時請明確寫「待確認」。只回傳 JSON：{\"species\":\"名稱\"}。" },
+        { role: "user", content: [{ type: "text", text: "請辨識這張潛水照片中的主要生物。" }, { type: "image_url", image_url: { url: image } }] },
+      ],
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error?.message || `AI 服務回應 ${response.status}`);
+  return speciesFromAiReply(payload?.choices?.[0]?.message?.content);
 }
 async function reversePlace(lat, lng) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1&accept-language=zh-TW`;
@@ -540,6 +579,9 @@ function New({ draft, setDraft, step, setStep, add }) {
     [saving, setSaving] = useState(false),
     [address, setAddress] = useState(""),
     [sightings, setSightings] = useState([]),
+    [identificationMode, setIdentificationMode] = useState("manual"),
+    [aiConfig, setAiConfig] = useState({ endpoint: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini", apiKey: "" }),
+    [aiState, setAiState] = useState({ loading: false, error: "", completed: 0 }),
     seq = useRef(0),
     last = useRef(0);
   const update = (k) => (e) => setDraft((x) => ({ ...x, [k]: e.target.value }));
@@ -574,6 +616,26 @@ function New({ draft, setDraft, step, setStep, add }) {
     setSaving(true);
     await add(sightings);
     setSaving(false);
+  };
+  const updateAiConfig = (key) => (event) => setAiConfig((value) => ({ ...value, [key]: event.target.value }));
+  const identifySightings = async () => {
+    if (!aiConfig.endpoint.trim() || !aiConfig.model.trim() || !aiConfig.apiKey.trim()) {
+      setAiState({ loading: false, error: "請先填寫 API 端點、模型名稱與 API key。", completed: 0 });
+      return;
+    }
+    setAiState({ loading: true, error: "", completed: 0 });
+    try {
+      const next = [...sightings];
+      for (let index = 0; index < next.length; index += 1) {
+        const species = await identifyPhotoWithApi(next[index].file, aiConfig);
+        next[index] = { ...next[index], species };
+        setSightings([...next]);
+        setAiState({ loading: true, error: "", completed: index + 1 });
+      }
+      setAiState({ loading: false, error: "", completed: next.length });
+    } catch (error) {
+      setAiState((state) => ({ ...state, loading: false, error: `辨識未完成：${error.message}` }));
+    }
   };
   const locateAddress = async () => { if (!address.trim()) return; setLoading(true); try { const rows = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW&q=${encodeURIComponent(address)}`)).json(); if (rows[0]) { const lat = +rows[0].lat, lng = normalizeLongitude(rows[0].lon); if (validCoordinates(lat, lng)) setDraft((x) => ({ ...x, lat, lng, locationName: rows[0].display_name })); } } finally { setLoading(false); } };
   return (
@@ -615,12 +677,13 @@ function New({ draft, setDraft, step, setStep, add }) {
         <section className="identify-stage">
           <div className="sighting-photo-strip">{sightings.map((sighting, index) => <img key={sighting.image} src={sighting.image} alt={`第 ${index + 1} 張潛水照片`} />)}</div>
           <div className="identify-copy">
-            <p className="microcopy">
-              <Sparkles size={14} />
-              辨識服務尚未連接
-            </p>
+            <p className="microcopy"><Sparkles size={14} /> {identificationMode === "ai" ? "使用你的 AI 服務" : "手動命名模式"}</p>
             <h2>替至少一次相遇，<br />留下名字。</h2>
-            <p className="field-hint">至少命名一張照片即可繼續；其他未確認的相片可先保留空白，日後再補上。</p>
+            <p className="field-hint">至少命名一張照片即可繼續；AI 建議僅供參考，發佈前仍可手動修正每一張相片的名稱。</p>
+            <section className="ai-identify-panel">
+              <div className="ai-identify-heading"><div><h3>想用自己的 AI 辨識？</h3><p>可選用支援圖片輸入的 OpenAI 相容 API。</p></div><button type="button" className="secondary-button" aria-pressed={identificationMode === "ai"} onClick={() => { setIdentificationMode((mode) => mode === "ai" ? "manual" : "ai"); setAiState({ loading: false, error: "", completed: 0 }); }}>{identificationMode === "ai" ? "改用手動輸入" : "設定 AI API"}</button></div>
+              {identificationMode === "ai" && <div className="ai-config"><div className="ai-privacy-note"><KeyRound size={17} /><p>你的 API key 不會儲存在 Pelagic 或資料庫；按下辨識時，相片會直接傳送給你設定的 AI 服務商。</p></div><label>API 端點<input type="url" value={aiConfig.endpoint} onChange={updateAiConfig("endpoint")} placeholder="https://api.example.com/v1/chat/completions" /></label><label>視覺模型名稱<input value={aiConfig.model} onChange={updateAiConfig("model")} placeholder="例如：gpt-4o-mini" /></label><label>API key<input type="password" autoComplete="off" value={aiConfig.apiKey} onChange={updateAiConfig("apiKey")} placeholder="只在這次辨識使用" /></label><details><summary>怎樣設定？</summary><ol><li>到你的 AI 服務商建立一組具圖片辨識權限的 API key。</li><li>填入該服務商的 Chat Completions API 端點與模型名稱。</li><li>確認它支援 OpenAI 相容的圖片訊息格式，再按「開始辨識」。</li></ol><p>辨識可能產生服務商費用；若 API 因 CORS 或格式限制無法從瀏覽器呼叫，請改用手動輸入。</p></details><button type="button" className="secondary-button ai-run-button" disabled={aiState.loading} onClick={identifySightings}>{aiState.loading ? <><LoaderCircle className="spin" /> 正在辨識 {aiState.completed}/{sightings.length}</> : <><Sparkles /> 開始辨識 {sightings.length} 張照片</>}</button>{aiState.error && <p className="ai-error">{aiState.error}</p>}{!aiState.loading && aiState.completed === sightings.length && sightings.length > 0 && <p className="ai-complete">已填入建議名稱，請逐張確認後再繼續。</p>}</div>}
+            </section>
             <div className="sighting-names">{sightings.map((sighting, index) => <label key={sighting.image}>照片 {index + 1} 的生物名稱<input placeholder="例如：玳瑁（可留空）" value={sighting.species} onChange={(event) => setSightings((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, species: event.target.value } : row))} /></label>)}</div>
             <button
               className="primary-button"
