@@ -1,38 +1,67 @@
-# Pelagic
+# Pelagic — 潛水日誌
 
-React + Vite prototype for a photo-led dive log.
+Pelagic 是一個給潛水者使用的相片日誌與社群網站。它讓使用者把每一次下潛看見的海洋生物、潛點、深度與照片保存起來，並在世界地圖上留下自己的潛水足跡。
 
-## Run locally
+網站已部署於 [pelagic-dive-log.vercel.app](https://pelagic-dive-log.vercel.app/)。
+
+## 這個專案可以做什麼？
+
+- 用 Email 或 Google 帳號登入，保留個人日誌與檔案。
+- 一次記錄一潛，並可上傳多張水下相片；至少為一張相片填寫物種名稱。
+- 輸入地址或在世界地圖上選點，儲存潛點名稱與經緯度。
+- 隨時修改自己的日誌資料，或連同相片一起刪除日誌。
+- 在地圖上查看自己的、社群公開的，以及追蹤者的潛水紀錄。
+- 探索其他潛水者公開的日誌，追蹤創作者，並依互動熱度排序內容。
+- 對公開日誌按讚、收藏、留言；創作者可在站內收到互動通知。
+- 點擊相片可放大瀏覽、下載，並跳至對應的潛點地圖。
+- 管理員可查看及移除不適合的公開內容。
+
+## 技術架構
+
+- **前端：** React + Vite
+- **地圖：** Leaflet、React Leaflet、OpenStreetMap 與 Overpass API
+- **登入、資料庫與相片儲存：** Supabase Auth、PostgreSQL、Supabase Storage
+- **部署：** Vercel
+
+## 本機啟動
 
 ```powershell
 npm install
+Copy-Item .env.example .env
 npm run dev
 ```
 
-`localhost` only works on the computer running the development server. It is not a shareable website address.
+在 `.env` 填入自己的 Supabase 專案資料：
 
-## Share with friends
+```env
+VITE_SUPABASE_URL=你的 Supabase Project URL
+VITE_SUPABASE_PUBLISHABLE_KEY=你的 Supabase publishable key
+```
 
-Deploy the project to a hosting provider such as Netlify or Vercel:
+請只使用 publishable key；不要把 `service_role` 或 secret key 放進前端環境檔或提交到 GitHub。
 
-1. Put this project in a GitHub repository.
-2. In Netlify or Vercel, import that repository.
-3. Set the build command to `npm run build` and the publish directory to `dist`.
-4. The provider gives you a public HTTPS address that can be shared.
+## 建立 Supabase 資料庫
 
-Deployment makes the website reachable, but it does not yet make users' logs shared or persistent. The current prototype stores a chosen image and record only in the open browser session. A production release needs authentication, a database, image storage, and a real species-identification provider.
+依序在 Supabase SQL Editor 執行 [`supabase/migrations`](supabase/migrations) 內的 migration 檔案。它們會建立：
 
-## Enable cloud accounts and dive logs
+- 使用者個人檔案、潛水日誌與多張相片資料表
+- 留言、按讚、收藏、追蹤與通知
+- 管理員與內容審核權限
+- Row Level Security（每位使用者只能管理自己的內容）
+- `dive-photos` 圖片儲存 bucket 的存取規則
 
-The project now includes a Supabase client, a `dive_logs` table migration, row-level security policies, and a `dive-photos` storage bucket policy.
+接著在 Supabase Auth 啟用 Email 與 Google 登入。Google OAuth 的 redirect URL 應包含本機開發網址與正式網站網址。
 
-1. Create a Supabase project and copy `.env.example` to `.env`.
-2. Fill in the project URL and **publishable** key. Never put a `service_role` key in a Vite environment file.
-3. Run [`supabase/migrations/20260916_initial_schema.sql`](supabase/migrations/20260916_initial_schema.sql) in the Supabase SQL editor.
-4. Enable the desired sign-in provider in Supabase Auth, then connect the app's sign-in UI to `src/lib/supabase.js`.
+## 注意事項
 
-The browser client uses the Supabase publishable key; the database and storage policies restrict each authenticated user to their own records.
+- 潛點地圖資料來自社群維護的 OpenStreetMap，並不代表完整商業潛點資料庫。
+- 目前物種名稱由使用者手動填寫；尚未接入自動生物辨識服務。
+- 對其他人的相片請尊重版權、潛水安全及當地保育規範。
 
-## Map data
+## 開發指令
 
-The global map uses OpenStreetMap tiles and requests public `scuba_diving` / `diving` points from the Overpass API after the user zooms into a region. When recording a dive, the user clicks the map to store the exact latitude and longitude; the saved record appears as a personal marker on the map for that browser session. Coverage depends on community-maintained OpenStreetMap data; it is not a claimed complete commercial dive-site database.
+```powershell
+npm run dev      # 啟動本機開發伺服器
+npm run build    # 建立正式部署版本
+npm run preview  # 預覽建立後的版本
+```
